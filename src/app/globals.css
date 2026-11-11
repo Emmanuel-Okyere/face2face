@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+:root {
+  /* Warm, airy palette — cream canvas, ink pills, one hot highlight */
+  --bg: #f3f1ea;
+  --surface: #fdfcf8;
+  --surface-2: #f1eee6;
+  --line: #e7e3d8;
+  --ink: #1c1b18;
+  --muted: #8a867b;
+  --accent: #e8531f;      /* highlight: today's bar, live dot, key numbers */
+  --accent-ink: #ffffff;
+  --good: #3f9d63;        /* present / success */
+  --good-soft: #cfeed6;
+  --warn: #d98d1e;
+  --danger: #d6453b;
+  --info: #7f95ef;
+  --info-soft: #dfe5fd;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: light;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Subtle dotted backdrop used by the kiosk + landing page */
+.grid-bg {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, color-mix(in oklab, var(--good-soft) 70%, transparent), transparent 60%),
+    radial-gradient(900px 400px at -10% 110%, color-mix(in oklab, var(--info-soft) 70%, transparent), transparent 60%),
+    var(--bg);
+}
+
+/* Diagonal hatching used for chart "remaining" areas, as in the reference design */
+.hatch {
+  background-image: repeating-linear-gradient(135deg, color-mix(in oklab, var(--ink) 10%, transparent) 0 1px, transparent 1px 6px);
+}
+.hatch-v {
+  background-image: repeating-linear-gradient(90deg, color-mix(in oklab, var(--ink) 9%, transparent) 0 1px, transparent 1px 5px);
+}
+.card-shadow {
+  box-shadow: 0 1px 0 rgba(28, 27, 24, 0.03), 0 8px 24px -12px rgba(28, 27, 24, 0.12);
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+.scanline {
+  animation: scan 2.4s cubic-bezier(.45,0,.55,1) infinite alternate;
+}
+@keyframes pop {
+  0% { transform: scale(.85); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.pop { animation: pop .45s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-6px); }
+  40%, 60% { transform: translateX(6px); }
+}
+.shake { animation: shake .5s both; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; color: black; }
+}
+
+/* Print just the QR badge when body.print-badge is set */
+@media print {
+  body.print-badge * { visibility: hidden; }
+  body.print-badge #badge, body.print-badge #badge * { visibility: visible; }
+  body.print-badge #badge { position: fixed; left: 0; top: 0; }
+}
+
+/* ── Landing page kiosk illustration (6 s loop) ─────────────────────────── */
+@keyframes land-brackets {
+  0%, 35% { stroke: #ffffff; }
+  45%, 100% { stroke: var(--good); }
+}
+@keyframes land-dots {
+  0%, 10% { opacity: 0; }
+  20%, 80% { opacity: 0.55; }
+  92%, 100% { opacity: 0; }
+}
+@keyframes land-welcome {
+  0%, 48% { opacity: 0; transform: translateY(14px) scale(0.98); }
+  56%, 88% { opacity: 1; transform: none; }
+  96%, 100% { opacity: 0; transform: translateY(6px); }
+}
+@keyframes land-hint {
+  0%, 12% { opacity: 0; }
+  18%, 42% { opacity: 1; }
+  48%, 100% { opacity: 0; }
+}
+.land-brackets { stroke: var(--good); animation: land-brackets 6s ease-in-out infinite; }
+.land-dots { animation: land-dots 6s ease-in-out infinite; }
+.land-welcome { animation: land-welcome 6s cubic-bezier(.2,.8,.2,1) infinite; }
+.land-hint { animation: land-hint 6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .land-brackets, .land-dots, .land-welcome, .land-hint { animation: none; }
+  .land-dots { opacity: 0.55; }
+  .land-hint { opacity: 0; }
+}
