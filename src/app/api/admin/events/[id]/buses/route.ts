@@ -66,3 +66,15 @@ export const DELETE = handle<Ctx>(async (req, { params }) => {
   await tenant(org.id, (sql) => sql`delete from event_buses where id = ${bid} and event_id = ${id}`);
   return json({ ok: true });
 });
+
+/** A new captain link for a bus; the old one stops working at once. */
+export const PATCH = handle<Ctx>(async (req, { params }) => {
+  const { org } = await requireOrg(req);
+  const id = z.uuid().parse((await params).id);
+  const bid = z.uuid().parse(req.nextUrl.searchParams.get("bid"));
+  const [b] = await tenant(org.id, (sql) => sql`
+    update event_buses set captain_token = replace(gen_random_uuid()::text, '-', '')
+    where id = ${bid} and event_id = ${id} returning captain_token`);
+  if (!b) throw new HttpError(404, "Bus not found");
+  return json({ token: b.captain_token });
+});

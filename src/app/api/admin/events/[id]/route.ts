@@ -16,14 +16,15 @@ export const GET = handle<Ctx>(async (req, { params }) => {
     const event = await loadEvent(sql, id);
     const [rooms, buses, households, people, messages] = await Promise.all([
       sql`select id, building, name, gender, beds, church, note from event_rooms where event_id = ${id} order by building, length(name), name`,
-      sql`select id, name, seats, churches, pickup, departs, driver from event_buses where event_id = ${id} order by length(name), name`,
+      sql`select id, name, seats, churches, pickup, departs, driver, captain_token from event_buses where event_id = ${id} order by length(name), name`,
       sql`select id, church, contact_name, contact_phone, contact_email, code, pass_token, source, created_at from event_households where event_id = ${id} order by created_at`,
       sql`select id, household_id, full_name, gender, age, age_group, to_json(days) as days, relation, phone, needs_bus, answers, status, code,
             room_id, bed, room_locked, bus_id, seat, seat_locked, arrived_at, created_at
           from event_registrants where event_id = ${id} order by created_at`,
       sql`select status, count(*)::int as n from event_messages where event_id = ${id} group by status`,
     ]);
-    return { event, rooms, buses, households, people, messages: Object.fromEntries(messages.map((m) => [m.status, m.n])) };
+    const boardings = await sql`select registrant_id, bus_id, trip, method, at from event_boardings where event_id = ${id}`;
+    return { event, rooms, buses, households, people, boardings, messages: Object.fromEntries(messages.map((m) => [m.status, m.n])) };
   });
   return json({ ...data, origin: appOrigin(req), channels: { sms: smsEnabled(), email: mailEnabled() } });
 });

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { api, Button, Card, cx, Empty, Field, Input, Pill } from "@/components/ui";
+import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
+import { api, Button, Card, cx, Empty, Field, Input, MoreMenu, Pill } from "@/components/ui";
 import type { Bus, Person, TabProps } from "./types";
 import { ask, toast, toastError } from "@/components/feedback";
 
@@ -10,6 +11,7 @@ const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.ch
 export default function Buses({ d, reload }: TabProps) {
   const [adding, setAdding] = useState(d.buses.length === 0);
   const [editing, setEditing] = useState<string | null>(null);
+  const [captain, setCaptain] = useState<Bus | null>(null);
   const [busy, setBusy] = useState<"" | "fill" | "all">("");
   const [result, setResult] = useState<{ changed: number; unplaced: { id: string; reason: string }[] } | null>(null);
   const hh = useMemo(() => new Map(d.households.map((h) => [h.id, h])), [d.households]);
@@ -105,17 +107,19 @@ th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}th{font-size:
             <Card key={b.id} className="space-y-3 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{b.name}</span>
-                {b.churches.length ? b.churches.map((c) => <Pill key={c} tone="info">{c}</Pill>) : <Pill>Any church</Pill>}
-                <div className="ml-auto flex gap-1">
-                  <button onClick={() => manifest(b)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-ink" disabled={!on.length}>
-                    Manifest
+                {b.churches.length ? b.churches.map((c) => <Pill key={c}>{c}</Pill>) : <Pill>Any church</Pill>}
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={() => setCaptain(b)} className="rounded-lg px-2 py-1 text-xs font-medium text-ink hover:bg-surface-2">
+                    Boarding
                   </button>
                   <button onClick={() => setEditing(b.id)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-ink">
                     Edit
                   </button>
+                  <MoreMenu items={[{ label: "Print manifest", onClick: () => manifest(b) }]} />
                 </div>
               </div>
               <div className="text-xs text-muted">{[b.pickup && `From ${b.pickup}`, b.departs, b.driver].filter(Boolean).join(" · ") || "No pickup details"}</div>
+              <BoardingStatus d={d} bus={b} assigned={on.length} />
               {/* Seat map: filled seats dark, free seats outlined. */}
               <div className="flex flex-wrap gap-1">
                 {Array.from({ length: b.seats }, (_, i) => {
@@ -153,6 +157,8 @@ th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}th{font-size:
           );
         })}
       </div>
+
+      {captain && <CaptainLink d={d} bus={d.buses.find((x) => x.id === captain.id) ?? captain} onClose={() => setCaptain(null)} reload={reload} />}
 
       {waiting.length > 0 && d.buses.length > 0 && (
         <Card>
@@ -288,6 +294,104 @@ function BusForm({ d, bus, onDone, onCancel }: { d: TabProps["d"]; bus?: Bus; on
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+/** Live boarding count for each trip that has started (same rules as the captain's page). */
+function BoardingStatus({ d, bus }: { d: TabProps["d"]; bus: Bus; assigned: number }) {
+  const assignedHere = d.people.filter((p) => p.status === "registered" && p.bus_id === bus.id);
+  const trips = (["out", "back"] as const)
+    .map((trip) => {
+      const rows = d.boardings.filter((x) => x.trip === trip);
+      if (!rows.length) return null;
+      const of = new Map(rows.map((x) => [x.registrant_id, x]));
+      const onHere = rows.filter((x) => x.bus_id === bus.id && x.method !== "skipped").length;
+      // Expected: our passengers, minus "not coming" and those who took another bus, plus anyone who took ours instead.
+      const ours = assignedHere.filter((p) => {
+        const x = of.get(p.id);
+        return !x || (x.method !== "skipped" && x.bus_id === bus.id);
+      }).length;
+      const extras = rows.filter((x) => x.bus_id === bus.id && x.method !== "skipped" && !assignedHere.some((p) => p.id === x.registrant_id)).length;
+      return { trip, onHere, expected: ours + extras };
+    })
+    .filter(Boolean) as { trip: "out" | "back"; onHere: number; expected: number }[];
+  if (!trips.length) return null;
+  return (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+      {trips.map((t) => (
+        <span key={t.trip} className={t.onHere >= t.expected ? "font-medium text-[#2e7d4f]" : "text-ink/80"}>
+          {t.trip === "out" ? "Going" : "Return"}: {t.onHere} / {t.expected} on board
+          {t.onHere < t.expected && <span className="text-muted"> · {t.expected - t.onHere} missing</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The bus captain's link: send it, show it as a QR, or replace it. */
+function CaptainLink({ d, bus, onClose, reload }: { d: TabProps["d"]; bus: Bus; onClose: () => void; reload: () => Promise<void> }) {
+  const url = `${d.origin}/board/${bus.captain_token}`;
+  const [qr, setQr] = useState("");
+  useEffect(() => {
+    QRCode.toDataURL(url, { width: 360, margin: 1 }).then(setQr);
+  }, [url]);
+  const share = `${d.event.name} — ${bus.name} boarding list: ${url}`;
+  return (
+    <Card className="ring-2 ring-ink/10">
+      <div className="flex flex-col gap-5 sm:flex-row">
+        {/* eslint-disable-next-line @next/next/no-img-element -- generated data: URL */}
+        {qr ? <img src={qr} alt="Captain link QR code" className="size-40 shrink-0 self-center rounded-xl border border-line" /> : <div className="size-40 shrink-0 rounded-xl bg-surface-2" />}
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <h3 className="font-medium">{bus.name} — captain&apos;s boarding list</h3>
+            <p className="text-sm text-muted">
+              Give this to the bus captain. On their phone they scan passes or tap names as people get on, see who&apos;s still missing, and call or text them. No login needed — anyone with the link can board people on this bus.
+            </p>
+          </div>
+          <div className="truncate rounded-xl bg-surface-2 px-3 py-2 font-mono text-xs">{url}</div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={async () => {
+                await navigator.clipboard.writeText(url);
+                toast("Link copied");
+              }}
+            >
+              Copy link
+            </Button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(share)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-full border border-line px-4 py-2 text-sm hover:bg-surface-2"
+            >
+              Send on WhatsApp
+            </a>
+            <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-full border border-line px-4 py-2 text-sm hover:bg-surface-2">
+              Open
+            </a>
+            <Button
+              variant="subtle"
+              onClick={async () => {
+                const ok = await ask({ title: "Make a new captain link?", body: "The current link stops working immediately. Use this if it was shared with the wrong person.", confirm: "New link", danger: true });
+                if (!ok) return;
+                try {
+                  await api(`/api/admin/events/${d.event.id}/buses?bid=${bus.id}`, { method: "PATCH" });
+                  await reload();
+                  toast("New link ready");
+                } catch (e) {
+                  toastError(e);
+                }
+              }}
+            >
+              New link
+            </Button>
+            <Button variant="ghost" className="ml-auto" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </div>
     </Card>
   );
 }

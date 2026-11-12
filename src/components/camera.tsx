@@ -5,7 +5,8 @@ import type { FaceObservation } from "@/lib/face/engine";
 
 export type CameraState = "starting" | "ready" | "denied" | "unavailable";
 
-export function useCamera(enabled = true) {
+/** `facing`: "user" (selfie camera, for faces) or "environment" (back camera, for scanning passes). */
+export function useCamera(enabled = true, facing: "user" | "environment" = "user") {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<CameraState>("starting");
 
@@ -19,7 +20,7 @@ export function useCamera(enabled = true) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 720 } },
+          video: { facingMode: facing === "environment" ? { ideal: "environment" } : "user", width: { ideal: 960 }, height: { ideal: 720 } },
         });
         if (cancelled) return stream.getTracks().forEach((t) => t.stop());
         const v = videoRef.current!;
@@ -35,7 +36,7 @@ export function useCamera(enabled = true) {
       cancelled = true;
       stream?.getTracks().forEach((t) => t.stop());
     };
-  }, [enabled]);
+  }, [enabled, facing]);
 
   return { videoRef, state };
 }

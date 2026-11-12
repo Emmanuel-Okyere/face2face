@@ -21,7 +21,8 @@ export type Ev = {
   duplicates_ignored: string[];
 };
 export type Room = { id: string; building: string; name: string; gender: "male" | "female" | "family"; beds: number; church: string | null; note: string | null };
-export type Bus = { id: string; name: string; seats: number; churches: string[]; pickup: string | null; departs: string | null; driver: string | null };
+export type Bus = { id: string; name: string; seats: number; churches: string[]; pickup: string | null; departs: string | null; driver: string | null; captain_token: string };
+export type Boarding = { registrant_id: string; bus_id: string | null; trip: "out" | "back"; method: "scan" | "tap" | "skipped"; at: string };
 export type Household = { id: string; church: string; contact_name: string; contact_phone: string | null; contact_email: string | null; code: string; pass_token: string; source: string; created_at: string };
 export type Person = {
   id: string;
@@ -52,6 +53,7 @@ export type EventData = {
   buses: Bus[];
   households: Household[];
   people: Person[];
+  boardings: Boarding[];
   messages: Record<string, number>;
   origin: string;
   channels: { sms: boolean; email: boolean };
