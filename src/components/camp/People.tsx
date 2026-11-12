@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { PhoneDisplay } from "@/components/PhoneInput";
 import { api, Button, Card, cx, Empty, Input, MoreMenu, Pill } from "@/components/ui";
+import { pairKey, possibleDuplicates } from "@/lib/camp/duplicates";
 import { daysLabel, eventDays, plural, roomLabel } from "@/lib/camp/format";
 import RegistrationForm, { ageGroupName, blankRegistration, checkRegistration, effectiveForm, toPayload, type RegistrationDraft } from "./RegistrationForm";
 import type { Household, Person, TabProps } from "./types";
@@ -59,6 +60,15 @@ export default function People({ d, reload }: TabProps) {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   };
 
+  /** Jump to a registration (e.g. the one that already has a phone number) and open it for editing. */
+  const openRegistration = (hid: string) => {
+    setQ("");
+    setChurch("");
+    setShow("registered");
+    setEditing(hid);
+    setTimeout(() => document.getElementById(`reg-${hid}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+
   const patch = async (p: Person, json: Record<string, unknown>) => {
     try {
       await api(`/api/admin/events/${d.event.id}/registrants?rid=${p.id}`, { method: "PATCH", json });
@@ -100,7 +110,9 @@ export default function People({ d, reload }: TabProps) {
         </div>
       </div>
 
-      {editing === "new" && <Editor d={d} eventInfo={eventInfo} onDone={async () => (setEditing(null), await reload())} onCancel={() => setEditing(null)} />}
+      <Duplicates d={d} reload={reload} onOpen={openRegistration} />
+
+      {editing === "new" && <Editor d={d} eventInfo={eventInfo} onDone={async () => (setEditing(null), await reload())} onCancel={() => setEditing(null)} onOpen={openRegistration} />}
 
       {list.length === 0 && editing !== "new" ? (
         <Empty title={d.households.length ? "No one matches" : "No registrations yet"}>
@@ -110,9 +122,11 @@ export default function People({ d, reload }: TabProps) {
         <div className="space-y-3">
           {list.map(({ h, members }) =>
             editing === h.id ? (
-              <Editor key={h.id} d={d} eventInfo={eventInfo} household={h} members={byHousehold.get(h.id) ?? []} onDone={async () => (setEditing(null), await reload())} onCancel={() => setEditing(null)} />
+              <div key={h.id} id={`reg-${h.id}`} className="scroll-mt-24">
+              <Editor d={d} eventInfo={eventInfo} household={h} members={byHousehold.get(h.id) ?? []} onDone={async () => (setEditing(null), await reload())} onCancel={() => setEditing(null)} onOpen={openRegistration} />
+              </div>
             ) : (
-              <Card key={h.id} className="p-0">
+              <Card key={h.id} className="scroll-mt-24 p-0">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line px-4 py-3">
                   <div className="min-w-0">
                     <div className="font-medium">{h.contact_name}</div>
@@ -229,6 +243,7 @@ function Editor({
   members,
   onDone,
   onCancel,
+  onOpen,
 }: {
   d: TabProps["d"];
   eventInfo: Parameters<typeof RegistrationForm>[0]["event"];
@@ -236,6 +251,7 @@ function Editor({
   members?: Person[];
   onDone: () => Promise<void>;
   onCancel: () => void;
+  onOpen: (householdId: string) => void;
 }) {
   const [f, setF] = useState<RegistrationDraft>(() =>
     household
@@ -263,6 +279,7 @@ function Editor({
   const [notify, setNotify] = useState(true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [existing, setExisting] = useState<string | null>(null);
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const problem = checkRegistration(f, eventInfo.days, eventInfo.form);
@@ -275,6 +292,8 @@ function Editor({
       await onDone();
     } catch (e) {
       setErr((e as Error).message);
+      const match = (e as { data?: { code?: string; match?: { householdId: string } } }).data;
+      setExisting(match?.code === "duplicate" && match.match ? match.match.householdId : null);
       setBusy(false);
     }
   };
@@ -282,7 +301,16 @@ function Editor({
     <Card className="ring-2 ring-ink/10">
       <form onSubmit={save} className="space-y-4">
         <RegistrationForm event={eventInfo} value={f} onChange={setF} />
-        {err && <p className="text-sm text-danger">{err}</p>}
+        {err && (
+          <p className="text-sm text-danger">
+            {err}{" "}
+            {existing && (
+              <button type="button" onClick={() => onOpen(existing)} className="font-medium text-ink underline underline-offset-2">
+                Open that registration
+              </button>
+            )}
+          </p>
+        )}
         <div className="flex flex-wrap items-center justify-end gap-3">
           {!household && (d.channels.sms || d.channels.email) && (
             <label className="mr-auto flex items-center gap-2 text-xs text-muted">
@@ -298,6 +326,96 @@ function Editor({
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+/** People who look registered twice (same name and age, different registrations), for an admin to settle. */
+function Duplicates({ d, reload, onOpen }: { d: TabProps["d"]; reload: () => Promise<void>; onOpen: (hid: string) => void }) {
+  const [busy, setBusy] = useState("");
+  const pairs = possibleDuplicates(d.people, d.event.age_groups, d.event.duplicates_ignored);
+  if (!pairs.length) return null;
+  const hh = new Map(d.households.map((h) => [h.id, h]));
+  const size = (hid: string) => d.people.filter((p) => p.household_id === hid && p.status === "registered").length;
+  const where = (p: Person) => {
+    const h = hh.get(p.household_id);
+    const n = size(p.household_id);
+    return n === 1 ? `on their own · ${h?.church}` : `with ${h?.contact_name} (${n} people) · ${h?.church}`;
+  };
+  const age = (p: Person) => (p.age !== null ? `${p.age}` : (p.age_group ?? "age not given"));
+
+  const remove = async (p: Person, other: Person) => {
+    const ok = await ask({
+      title: `Remove this copy of ${p.full_name}?`,
+      body: `They stay registered ${where(other).split(" · ")[0]}. Any bed or seat this copy had is freed.`,
+      confirm: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(p.id);
+    try {
+      const r = await api<{ registrationRemoved: boolean }>(`/api/admin/events/${d.event.id}/registrants?rid=${p.id}`, { method: "DELETE" });
+      toast(r.registrationRemoved ? "Duplicate removed (its registration was empty and is gone too)" : "Duplicate removed");
+      await reload();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy("");
+    }
+  };
+  const notSame = async (a: Person, b: Person) => {
+    setBusy(pairKey(a.id, b.id));
+    try {
+      await api(`/api/admin/events/${d.event.id}/duplicates`, { method: "POST", json: { a: a.id, b: b.id } });
+      toast("Marked as two different people");
+      await reload();
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  return (
+    <Card className="space-y-3">
+      <div>
+        <h3 className="font-medium">Possible duplicates · {pairs.length}</h3>
+        <p className="text-xs text-muted">Same name and age in different registrations. Keep one, or mark them as different people.</p>
+      </div>
+      <ul className="space-y-2">
+        {pairs.slice(0, 20).map(([a, b]) => (
+          <li key={pairKey(a.id, b.id)} className="rounded-2xl border border-line p-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                [a, b],
+                [b, a],
+              ].map(([p, other]) => (
+                <div key={p.id} className="flex items-center gap-2 rounded-xl bg-surface-2/50 px-3 py-2 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <button onClick={() => onOpen(p.household_id)} className="truncate text-left font-medium hover:underline">
+                      {p.full_name} <span className="font-normal text-muted">· {age(p)}</span>
+                    </button>
+                    <div className="truncate text-xs text-muted">{where(p)}</div>
+                  </div>
+                  <button
+                    onClick={() => remove(p, other)}
+                    disabled={!!busy}
+                    className="shrink-0 rounded-lg px-2 py-1 text-xs text-muted hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+                  >
+                    Remove this one
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-right">
+              <button onClick={() => notSame(a, b)} disabled={!!busy} className="text-xs text-muted hover:text-ink disabled:opacity-40">
+                Not the same person
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {pairs.length > 20 && <p className="text-xs text-muted">Showing 20 of {pairs.length}. Settle these and the rest appear.</p>}
     </Card>
   );
 }

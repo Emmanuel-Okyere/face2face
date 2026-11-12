@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { clientIp } from "@/lib/auth";
-import { effectiveForm, EVENT_COLS, eventDays, householdSchema, insertHousehold, normalizeHousehold, queueMessages, sendQueued, type EventRow } from "@/lib/camp/events";
+import { effectiveForm, EVENT_COLS, eventDays, isPhoneClash, nationalPhone, phoneConflicts, phonesOf, householdSchema, insertHousehold, normalizeHousehold, queueMessages, sendQueued, type EventRow } from "@/lib/camp/events";
 import { db } from "@/lib/db";
 import { body, handle, HttpError, json } from "@/lib/http";
 import { appOrigin } from "@/lib/mail";
@@ -44,13 +44,19 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   const h = normalizeHousehold(e, input);
   await rateLimit(`event-register:phone:${e.id}:${h.contact_phone}`, 5, 24 * 60 * 60);
   const origin = appOrigin(req);
+  // One registration per phone number: the contact's or anyone's own phone already registered
+  // means this is probably a repeat. (Names aren't revealed to the public form.)
+  const already = (phone: string) =>
+    new HttpError(409, `${nationalPhone(phone)} is already registered for this event. Check your SMS for your pass, or contact the organizers to add or change people.`, {}, "duplicate");
   const hh = await tenant(e.org_id, async (sql) => {
-    // One registration per contact phone per event (stops accidental double submits).
-    const [dup] = await sql`select id from event_households where event_id = ${e.id} and contact_phone = ${h.contact_phone}`;
-    if (dup) throw new HttpError(409, "This phone number has already registered. Check your SMS for your pass, or contact the organizers to make changes.");
+    const clash = await phoneConflicts(sql, e.id, phonesOf(h));
+    if (clash.length) throw already(clash[0].phone);
     const row = await insertHousehold(sql, e, h, "public");
     await queueMessages(sql, e, "registered", origin, { householdIds: [row.id] });
     return row;
+  }).catch((err) => {
+    if (isPhoneClash(err)) throw already(h.contact_phone); // two submits at the same instant
+    throw err;
   });
   after(() => sendQueued(e.org_id, e.id, 5).catch((err) => console.error("[camp] send", err)));
   return json({ ok: true, code: hh.code, pass: `/pass/${hh.pass_token}` }, 201);

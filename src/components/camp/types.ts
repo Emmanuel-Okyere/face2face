@@ -18,6 +18,7 @@ export type Ev = {
   rooms_enabled: boolean;
   buses_enabled: boolean;
   form: FormConfig;
+  duplicates_ignored: string[];
 };
 export type Room = { id: string; building: string; name: string; gender: "male" | "female" | "family"; beds: number; church: string | null; note: string | null };
 export type Bus = { id: string; name: string; seats: number; churches: string[]; pickup: string | null; departs: string | null; driver: string | null };

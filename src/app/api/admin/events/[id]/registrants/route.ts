@@ -70,3 +70,18 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
   });
   return json({ ok: true });
 });
+
+/** Remove one person (e.g. the extra copy of a duplicate). An emptied registration goes too. */
+export const DELETE = handle<Ctx>(async (req, { params }) => {
+  const { org } = await requireOrg(req);
+  const id = z.uuid().parse((await params).id);
+  const rid = z.uuid().parse(req.nextUrl.searchParams.get("rid"));
+  const removed = await tenant(org.id, async (sql) => {
+    const [r] = await sql`delete from event_registrants where id = ${rid} and event_id = ${id} returning household_id`;
+    if (!r) throw new HttpError(404, "Person not found");
+    const [{ n }] = await sql`select count(*)::int as n from event_registrants where household_id = ${r.household_id}`;
+    if (n === 0) await sql`delete from event_households where id = ${r.household_id}`;
+    return { registrationRemoved: n === 0 };
+  });
+  return json(removed);
+});

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { HttpError } from "@/lib/http";
 import { mailEnabled, sendMail } from "@/lib/mail";
+import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 import { checkFieldDefs, coerce, toE164, type FieldDef } from "@/lib/person-fields";
 import { sendSms, smsEnabled } from "@/lib/sms";
 import { tenant, type Tx } from "@/lib/tenant";
@@ -26,6 +27,7 @@ export type EventRow = {
   rooms_enabled: boolean;
   buses_enabled: boolean;
   form: FormConfig;
+  duplicates_ignored: string[];
   created_at: string;
 };
 
@@ -52,7 +54,7 @@ export function effectiveForm(e: { form?: Partial<FormConfig> | null; rooms_enab
 // Dates come back as plain YYYY-MM-DD strings (no time-zone shifting).
 export const EVENT_COLS = `id, org_id, name, venue, to_char(starts_on, 'YYYY-MM-DD') as starts_on,
   to_char(ends_on, 'YYYY-MM-DD') as ends_on, registration_open, churches, age_groups, child_age, questions,
-  public_token, archived, unit_label, rooms_enabled, buses_enabled, form, created_at`;
+  public_token, archived, unit_label, rooms_enabled, buses_enabled, form, duplicates_ignored, created_at`;
 
 /** Every day of the event (YYYY-MM-DD), or [] when dates aren't set. Capped at 31 days. */
 export function eventDays(e: Pick<EventRow, "starts_on" | "ends_on">) {
@@ -207,6 +209,36 @@ export function normalizeHousehold(e: EventRow, h: HouseholdInput) {
   });
   return { ...h, contact_name: h.contact_name || members[0].full_name, contact_phone: phone, contact_email: form.email ? h.contact_email : null, members };
 }
+
+// ── Duplicates ───────────────────────────────────────────────────────────────
+
+export type PhoneConflict = { phone: string; household_id: string; contact_name: string; church: string; people: number };
+
+/** Every phone in a registration: the contact's and each person's own. */
+export const phonesOf = (h: ReturnType<typeof normalizeHousehold>) => [...new Set([h.contact_phone, ...h.members.map((m) => m.phone).filter((p): p is string => !!p)])];
+
+/**
+ * Registrations in this event already using any of these numbers, as a
+ * contact or as a person's own phone. `exclude` skips the registration being edited.
+ */
+export async function phoneConflicts(sql: Tx, eventId: string, phones: string[], exclude?: string): Promise<PhoneConflict[]> {
+  if (!phones.length) return [];
+  const rows = await sql`
+    select distinct on (h.id) x.phone, h.id as household_id, h.contact_name, h.church,
+      (select count(*)::int from event_registrants r2 where r2.household_id = h.id and r2.status = 'registered') as people
+    from (
+      select contact_phone as phone, id as household_id from event_households where event_id = ${eventId} and contact_phone = any(${phones})
+      union all
+      select r.phone, r.household_id from event_registrants r where r.event_id = ${eventId} and r.status = 'registered' and r.phone = any(${phones})
+    ) x join event_households h on h.id = x.household_id
+    where ${exclude ?? null}::uuid is null or h.id <> ${exclude ?? null}::uuid`;
+  return rows as unknown as PhoneConflict[];
+}
+
+export const nationalPhone = (e164: string) => parsePhoneNumberFromString(e164)?.formatNational() ?? e164;
+
+/** Postgres unique violation on the one-registration-per-phone rule (two submits at the same instant). */
+export const isPhoneClash = (e: unknown) => (e as { code?: string; constraint_name?: string })?.code === "23505" && /phone/.test((e as { constraint_name?: string }).constraint_name ?? "");
 
 export async function insertHousehold(sql: Tx, e: EventRow, h: ReturnType<typeof normalizeHousehold>, source: "public" | "admin") {
   const [hh] = await sql`
