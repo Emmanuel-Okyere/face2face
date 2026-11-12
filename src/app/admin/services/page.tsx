@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { PageHeader, useOrg } from "@/components/AdminShell";
-import { api, Button, Card, cx, Empty, Field, Input, Pill, Spinner } from "@/components/ui";
+import { api, Button, Card, cx, Empty, Field, Input, MoreMenu, Pill, Spinner } from "@/components/ui";
 import { DAY_SHORT, describeSchedule, fmtMin, isOpen, localNow, toMin, windowOf, type Service, type ServiceKind } from "@/lib/service-schedule";
+import { ask, toast } from "@/components/feedback";
 
 type Row = Service & { held: number; checkins: number; last_held: string | null };
 type Draft = {
@@ -57,8 +58,9 @@ export default function Services() {
     load();
   };
   const remove = async (s: Row) => {
-    if (!confirm(`Delete “${s.name}”?`)) return;
+    if (!(await ask({ title: `Delete “${s.name}”?`, confirm: "Delete", danger: true }))) return;
     await api(`/api/admin/services/${s.id}`, { method: "DELETE" });
+    toast(`${s.name} deleted`);
     load();
   };
 
@@ -149,41 +151,43 @@ function toDraft(s: Service): Draft {
 
 function ServiceCard({ s, openNow, onEdit, onArchive, onDelete }: { s: Row; openNow: boolean; onEdit: () => void; onArchive: () => void; onDelete: () => void }) {
   const w = windowOf(s);
+  const schedule = describeSchedule(s);
+  const allDay = w.opens === 0 && w.closes >= 24 * 60 - 1;
+  // One quiet line, only what isn't obvious: no repeat of the name, no "all day", no "everyone".
+  const details = [
+    schedule.toLowerCase() !== s.name.toLowerCase() && schedule,
+    !allDay &&
+      (w.opens !== toMin(s.start_time) || w.closes !== toMin(s.end_time)) &&
+      (w.closes === toMin(s.end_time) ? `check-in from ${fmtMin(w.opens)}` : w.opens === toMin(s.start_time) ? `check-in until ${fmtMin(w.closes)}` : `check-in ${fmtMin(w.opens)}–${fmtMin(w.closes)}`),
+    s.late_after !== null && `late after ${fmtMin(toMin(s.start_time) + s.late_after)}`,
+    s.audience?.length && `for ${s.audience.join(", ")}`,
+    s.held > 0 && `held ${s.held} ${s.held === 1 ? "time" : "times"}`,
+  ].filter(Boolean) as string[];
+  const line = details.join(" · ");
   return (
-    <Card className={cx("flex flex-wrap items-center gap-4", !s.active && "opacity-60")}>
+    <Card className={cx("flex items-center gap-3", !s.active && "opacity-60")}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{s.name}</span>
           {openNow && <Pill tone="good">Open now</Pill>}
         </div>
-        <div className="mt-0.5 text-sm text-ink/70">{describeSchedule(s)}</div>
-        <div className="mt-1.5 flex flex-wrap gap-1.5 text-xs">
-          <Pill>
-            Check-in {fmtMin(w.opens)}–{fmtMin(w.closes)}
-          </Pill>
-          {s.late_after !== null && <Pill tone="warn">Late after {fmtMin(toMin(s.start_time) + s.late_after)}</Pill>}
-          {s.audience?.length ? s.audience.map((g) => <Pill key={g} tone="info">{g}</Pill>) : <Pill>Everyone</Pill>}
-        </div>
+        {line && <div className="mt-0.5 text-sm text-muted first-letter:uppercase">{line}</div>}
       </div>
-      <div className="text-right text-xs text-muted">
-        <div className="text-lg tabular-nums text-ink">{s.held}</div>
-        held
-      </div>
-      <div className="flex gap-1.5">
-        {s.active && (
-          <Button variant="ghost" onClick={onEdit}>
-            Edit
-          </Button>
-        )}
-        <Button variant="ghost" onClick={onArchive}>
-          {s.active ? "Archive" : "Restore"}
+      {s.active ? (
+        <Button variant="ghost" onClick={onEdit}>
+          Edit
         </Button>
-        {s.held === 0 && (
-          <Button variant="subtle" onClick={onDelete}>
-            Delete
-          </Button>
-        )}
-      </div>
+      ) : (
+        <Button variant="ghost" onClick={onArchive}>
+          Restore
+        </Button>
+      )}
+      <MoreMenu
+        items={[
+          ...(s.active ? [{ label: "Archive", onClick: onArchive }] : []),
+          ...(s.held === 0 ? [{ label: "Delete", onClick: onDelete, danger: true }] : []),
+        ]}
+      />
     </Card>
   );
 }

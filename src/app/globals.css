@@ -122,8 +122,45 @@ body {
 .land-dots { animation: land-dots 6s ease-in-out infinite; }
 .land-welcome { animation: land-welcome 6s cubic-bezier(.2,.8,.2,1) infinite; }
 .land-hint { animation: land-hint 6s ease-in-out infinite; }
+/* Toasts and dialogs (components/feedback.tsx) */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.toast-in { animation: toast-in 0.18s ease-out; }
+.dialog-in { animation: dialog-in 0.16s ease-out; }
+
+/* Loading placeholders and first-load entrance (dashboard and friends) */
+.skeleton {
+  background: linear-gradient(100deg, var(--surface-2) 30%, color-mix(in oklab, var(--surface-2) 45%, var(--surface)) 50%, var(--surface-2) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 10px;
+}
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes rise { from { opacity: 0; filter: blur(8px); transform: translateY(8px); } to { opacity: 1; filter: none; transform: none; } }
+@keyframes grow-y { from { transform: scaleY(0); } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.stagger > * { animation: rise 0.6s cubic-bezier(.2,.8,.2,1) both; }
+.stagger > *:nth-child(2) { animation-delay: 70ms; }
+.stagger > *:nth-child(3) { animation-delay: 140ms; }
+.stagger > *:nth-child(4) { animation-delay: 210ms; }
+.stagger > *:nth-child(5) { animation-delay: 280ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 340ms; }
+.grow-y { transform-origin: bottom; animation: grow-y 0.8s cubic-bezier(.2,.8,.2,1) both; }
+.grow-x { transform-origin: left; animation: grow-x 0.9s cubic-bezier(.2,.8,.2,1) both; }
+.fade-in { animation: fade-in 0.35s ease-out both; }
+.draw { stroke-dasharray: 1; animation: draw 1.2s cubic-bezier(.4,0,.2,1) both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .land-brackets, .land-dots, .land-welcome, .land-hint { animation: none; }
+  .land-brackets, .land-dots, .land-welcome, .land-hint, .toast-in, .dialog-in,
+  .skeleton, .stagger > *, .grow-y, .grow-x, .fade-in, .draw { animation: none; }
   .land-dots { opacity: 0.55; }
   .land-hint { opacity: 0; }
 }

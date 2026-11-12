@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/AdminShell";
 import { api, Avatar, Button, Card, cx, Empty, fmtTime, Input, Pill, Spinner } from "@/components/ui";
+import { ask, toast } from "@/components/feedback";
 
 type Row = {
   id: number;
@@ -50,8 +51,9 @@ export default function AttendanceLog() {
   }, [load]);
 
   const undo = async (r: Row) => {
-    if (!confirm(`Remove ${r.full_name}'s check-in on ${r.day}?`)) return;
+    if (!(await ask({ title: `Remove ${r.full_name}'s check-in?`, body: `On ${r.day}.`, confirm: "Remove", danger: true }))) return;
     await api(`/api/admin/attendance/manual?id=${r.id}`, { method: "DELETE" });
+    toast("Check-in removed");
     load();
   };
 
@@ -155,11 +157,11 @@ export default function AttendanceLog() {
                     <td className="px-3 py-3 font-mono">{fmtTime(r.checked_in_at)}</td>
                     <td className="px-3 py-3">
                       <span title={r.distance != null ? `distance ${r.distance.toFixed(3)}${r.margin != null ? `, margin ${r.margin.toFixed(3)}` : ""}` : undefined}>
-                        <Pill tone={r.method === "face" || r.method === "link" ? "good" : r.method === "qr" ? "info" : "muted"}>
+                        <Pill>
                           {r.method === "face"
                             ? `Face ${r.distance != null ? `· ${Math.round((1 - r.distance) * 100)}%` : ""}`
                             : r.method === "link"
-                              ? "📱 Phone + face"
+                              ? "Phone + face"
                               : r.method === "qr"
                                 ? "QR badge"
                                 : "Manual"}
@@ -170,7 +172,7 @@ export default function AttendanceLog() {
                       {r.kiosk ?? (r.recorded_by ? `by ${r.recorded_by}` : "—")}
                       {r.note && <div className="max-w-[220px] truncate italic">“{r.note}”</div>}
                     </td>
-                    <td className="px-3 py-3">{r.late ? <Pill tone="accent">⚠ Late</Pill> : <Pill tone="good">✓ On time</Pill>}</td>
+                    <td className="px-3 py-3">{r.late ? <Pill tone="warn">Late</Pill> : <span className="text-xs text-muted">On time</span>}</td>
                     <td className="px-5 py-3 text-right">
                       <button onClick={() => undo(r)} className="text-xs text-muted opacity-0 transition hover:text-danger group-hover:opacity-100 focus:opacity-100">
                         Remove

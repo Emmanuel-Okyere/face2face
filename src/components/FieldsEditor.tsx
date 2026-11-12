@@ -6,11 +6,19 @@ import { CountryPicker, flag } from "@/components/PhoneInput";
 import { api, Button, Card, cx, Input, Pill, Spinner } from "@/components/ui";
 import { countryName, FIELD_TYPES, newFieldKey, TYPE_LABELS, type FieldDef, type FieldType } from "@/lib/person-fields";
 import type { CountryCode } from "libphonenumber-js/max";
+import { ask, toast } from "@/components/feedback";
+
+const FIELDS_CHANGED = "f2f:fields-changed";
+/** Tell every field-related card on the page to reload (they share one stored list). */
+export const fieldsChanged = () => window.dispatchEvent(new Event(FIELDS_CHANGED));
 
 export function useOrgFields() {
   const [fields, setFields] = useState<FieldDef[] | null>(null);
   useEffect(() => {
-    api<{ fields: FieldDef[] }>("/api/admin/org/fields").then((r) => setFields(r.fields));
+    const load = () => api<{ fields: FieldDef[] }>("/api/admin/org/fields").then((r) => setFields(r.fields));
+    load();
+    window.addEventListener(FIELDS_CHANGED, load);
+    return () => window.removeEventListener(FIELDS_CHANGED, load);
   }, []);
   return fields;
 }
@@ -68,9 +76,9 @@ const PATHS = {
   school: "M2 9l10-5 10 5-10 5zM6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5M22 9v6",
   work: "M3 8h18v12H3zM8 8V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3M3 13h18M11 13v2h2v-2",
 } as const;
-type IconName = keyof typeof PATHS;
+export type IconName = keyof typeof PATHS;
 
-function Icon({ name, className }: { name: IconName; className?: string }) {
+export function Icon({ name, className }: { name: IconName; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className ?? "size-4"} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={PATHS[name]} />
@@ -80,9 +88,7 @@ function Icon({ name, className }: { name: IconName; className?: string }) {
 
 /** Owners decide what their organization collects about each person. */
 export default function FieldsEditor({ canEdit }: { canEdit: boolean }) {
-  const initial = useOrgFields();
-  const [saved, setSaved] = useState<FieldDef[] | null>(null);
-  const loaded = saved ?? initial;
+  const loaded = useOrgFields();
   const [draft, setDraft] = useState<FieldDef[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -120,8 +126,8 @@ export default function FieldsEditor({ canEdit }: { canEdit: boolean }) {
     setDraft([...fields, f]);
     if (!extra.label) setOpen(f.key);
   };
-  const remove = (f: FieldDef) => {
-    if (!confirm(`Remove “${f.label || "this field"}”? Saved answers are kept but no longer shown.`)) return;
+  const remove = async (f: FieldDef) => {
+    if (!(await ask({ title: `Remove “${f.label || "this field"}”?`, body: "Answers already saved are kept but no longer shown. Save fields to apply.", confirm: "Remove", danger: true }))) return;
     setDraft(fields.filter((x) => x.key !== f.key));
     if (open === f.key) setOpen(null);
   };
@@ -137,10 +143,11 @@ export default function FieldsEditor({ canEdit }: { canEdit: boolean }) {
     setBusy(true);
     setMsg("");
     try {
-      const r = await api<{ fields: FieldDef[] }>("/api/admin/org/fields", { method: "PUT", json: { fields } });
-      setSaved(r.fields); // the server's resolved copy
+      await api("/api/admin/org/fields", { method: "PUT", json: { fields } });
       setDraft(null);
-      setMsg("✓ Saved — forms, lists, import and export now use these fields");
+      fieldsChanged(); // reload here and in the Groups card
+      toast("Fields saved — forms, lists, import and export now use them");
+      setMsg("");
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
@@ -211,9 +218,12 @@ export default function FieldsEditor({ canEdit }: { canEdit: boolean }) {
                         </svg>
                       )}
                     </label>
-                    {f.builtin && <Pill>built-in</Pill>}
-                    {f.required && <Pill tone="accent">required</Pill>}
-                    {f.showInList && f.enabled && <Pill tone="info">in list</Pill>}
+                    {/* Labels need room; on phones the Edit panel says the same. */}
+                    <span className="hidden shrink-0 gap-1 sm:flex">
+                      {f.builtin && <Pill>built-in</Pill>}
+                      {f.required && <Pill tone="accent">required</Pill>}
+                      {f.showInList && f.enabled && <Pill>in list</Pill>}
+                    </span>
                     {canEdit && (
                       <div className="flex shrink-0 items-center">
                         <button type="button" onClick={() => setOpen(expanded ? null : f.key)} className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-ink">

@@ -140,7 +140,7 @@ function People() {
                       </td>
                     ))}
                     <td className="px-3 py-3">
-                      {p.embeddings ? <Pill tone="good">✓ {p.embeddings} photos</Pill> : <Pill tone="warn">Needs enrollment</Pill>}
+                      {p.embeddings ? <Pill tone="good">{p.embeddings} photos</Pill> : <Pill tone="warn">Needs enrollment</Pill>}
                     </td>
                     <td className="px-5 py-3 text-right">
                       {p.today_at ? <Pill tone="good">Present · {fmtTime(p.today_at)}</Pill> : <Pill>Not in</Pill>}

@@ -41,6 +41,8 @@ type Report = {
   series: { bucket: string; n: number; u?: number }[];
   methods: { method: string; n: number }[];
   groups: { group: string; people: number; attended: number }[];
+  groupList: string[];
+  group: string | null;
   lists: { absent: { total: number; people: P[] }; drifting: { total: number; people: P[] }; faithful: { total: number; people: P[] } };
 };
 
@@ -91,6 +93,7 @@ export default function Reports() {
   const [range, setRange] = useState<[string, string]>(() => presetRange("month"));
   const [active, setActive] = useState(30);
   const [service, setService] = useState("");
+  const [group, setGroup] = useState("");
   const [r, setR] = useState<Report | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
@@ -98,7 +101,7 @@ export default function Reports() {
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true);
-      api<Report>(`/api/admin/reports?from=${range[0]}&to=${range[1]}&active=${active}&service=${service}`)
+      api<Report>(`/api/admin/reports?from=${range[0]}&to=${range[1]}&active=${active}&service=${service}&group=${encodeURIComponent(group)}`)
         .then((d) => {
           setR(d);
           setErr("");
@@ -107,7 +110,7 @@ export default function Reports() {
         .finally(() => setLoading(false));
     }, 150);
     return () => clearTimeout(t);
-  }, [range, active, service]);
+  }, [range, active, service, group]);
 
   const choose = (p: Preset) => {
     setPreset(p);
@@ -181,6 +184,20 @@ export default function Reports() {
             ))}
           </select>
         )}
+        {r && r.groupList.length > 0 && (
+          <select
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm"
+            aria-label="Group"
+          >
+            <option value="">All groups</option>
+            {r.groupList.map((g) => (
+              <option key={g}>{g}</option>
+            ))}
+            <option value="—">No group</option>
+          </select>
+        )}
         <label className="ml-auto flex items-center gap-2 text-xs text-muted">
           Active = seen in the last
           <select
@@ -228,7 +245,7 @@ export default function Reports() {
               <Engagement r={r} />
             </Card>
           </div>
-          {r.groups.length > 1 || (r.groups[0] && r.groups[0].group !== "—") ? <Groups r={r} /> : null}
+          {!r.group && (r.groups.length > 1 || (r.groups[0] && r.groups[0].group !== "—")) ? <Groups r={r} /> : null}
           <FollowUp r={r} orgName={org?.name ?? r.org.name} />
         </div>
       )}
@@ -446,7 +463,7 @@ function FollowUp({ r, orgName }: { r: Report; orgName: string }) {
             className="whitespace-nowrap"
             onClick={() =>
               hardNavigate(
-                `/api/admin/reports?from=${r.period.from}&to=${r.period.to}&active=${r.totals.activeDays}&service=${r.service ?? ""}&format=csv&list=${tab}`,
+                `/api/admin/reports?from=${r.period.from}&to=${r.period.to}&active=${r.totals.activeDays}&service=${r.service ?? ""}&group=${encodeURIComponent(r.group ?? "")}&format=csv&list=${tab}`,
               )
             }
           >

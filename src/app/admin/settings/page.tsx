@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PageHeader, useMailEnabled, useMe } from "@/components/AdminShell";
 import FieldsEditor from "@/components/FieldsEditor";
+import GroupsEditor from "@/components/GroupsEditor";
 import LogoUploader from "@/components/LogoUploader";
 import { api, Avatar, Button, Card, cx, Field, Input, Pill, Spinner, timeAgo } from "@/components/ui";
+import { ask, toast, toastError } from "@/components/feedback";
 
 type OrgView = {
   id: string;
@@ -86,6 +88,7 @@ export default function Settings() {
               <Spinner />
             </Card>
           )}
+          <GroupsEditor canEdit={isOwner} />
           <Team canEdit={isOwner} />
         </div>
         <Security />
@@ -109,7 +112,7 @@ function OrgCard({ org, canEdit, onChange }: { org: OrgView; canEdit: boolean; o
     try {
       const r = await api<{ org: OrgView }>("/api/admin/org", { method: "PATCH", json });
       onChange(r.org);
-      if (tag === "save") setMsg("✓ Saved");
+      if (tag === "save") toast("Saved");
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
@@ -117,7 +120,7 @@ function OrgCard({ org, canEdit, onChange }: { org: OrgView; canEdit: boolean; o
     }
   };
   const rotate = async () => {
-    if (!confirm("Create a new shared link? The current one stops working immediately.")) return;
+    if (!(await ask({ title: "Create a new shared link?", body: "The current link stops working immediately.", confirm: "Create new link", danger: true }))) return;
     setBusy("rotate");
     const r = await api<{ org: OrgView }>("/api/admin/org?action=rotate-key", { method: "POST" });
     onChange(r.org);
@@ -334,13 +337,14 @@ function Team({ canEdit }: { canEdit: boolean }) {
     }
   };
   const act = async (a: A, method: "DELETE" | "PATCH", json?: { action: string; role?: string }) => {
-    if (method === "DELETE" && !confirm(`Remove ${a.email} from this organization?`)) return;
+    if (method === "DELETE" && !(await ask({ title: `Remove ${a.name || a.email}?`, body: `${a.email} loses access to this organization.`, confirm: "Remove", danger: true }))) return;
     try {
       await api(`/api/admin/admins?id=${a.id}`, { method, json });
-      if (json?.action === "invite") setMsg(`✓ Invite sent to ${a.email}`);
+      if (json?.action === "invite") toast(`Invite sent to ${a.email}`);
+      else if (method === "DELETE") toast(`${a.name || a.email} removed`);
       load();
     } catch (e) {
-      alert((e as Error).message);
+      toastError(e);
     }
   };
 
@@ -358,7 +362,7 @@ function Team({ canEdit }: { canEdit: boolean }) {
                 <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
                   {a.name}
                   {a.id === me?.id && <Pill>You</Pill>}
-                  <Pill tone={a.role === "owner" ? "info" : "muted"}>{a.role}</Pill>
+                  <Pill>{a.role === "owner" ? "Owner" : "Admin"}</Pill>
                   {a.must_change_password && <Pill tone="warn">Temporary password</Pill>}
                   {!a.last_login_at && !a.must_change_password && <Pill tone="warn">Invited</Pill>}
                   {a.locked && <Pill tone="danger">Locked</Pill>}
@@ -455,7 +459,8 @@ function Security() {
     try {
       await api("/api/auth/password", { method: "POST", json: pw });
       setPw({ current: "", next: "" });
-      setMsg("✓ Password changed — every other device was signed out");
+      toast("Password changed — every other device was signed out");
+      setMsg("");
       load();
     } catch (e) {
       setMsg((e as Error).message);

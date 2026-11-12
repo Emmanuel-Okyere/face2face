@@ -9,6 +9,7 @@ import { useOrgFields } from "@/components/FieldsEditor";
 import { FieldValue, PersonFieldsForm, personToForm, valueOf, type FormValues } from "@/components/PersonFields";
 import { api, Avatar, Button, Card, cx, Empty, fmtTime, Pill, Spinner, OrgLogo } from "@/components/ui";
 import { enabledFields } from "@/lib/person-fields";
+import { ask, toast } from "@/components/feedback";
 
 const EnrollCapture = dynamic(() => import("@/components/EnrollCapture"), {
   ssr: false,
@@ -69,13 +70,15 @@ function PersonPage() {
     load();
   };
   const remove = async () => {
-    if (!confirm(`Permanently delete ${p.full_name}, their face data and attendance history? This can't be undone.`)) return;
+    if (!(await ask({ title: `Delete ${p.full_name}?`, body: "Their face data and attendance history are deleted too. This can't be undone.", confirm: "Delete", danger: true }))) return;
     await api(`/api/admin/people/${id}`, { method: "DELETE" });
+    toast(`${p.full_name} deleted`);
     router.replace("/admin/people");
   };
   const clearFace = async () => {
-    if (!confirm("Delete this person's face data and photo? They'll need to re-enroll or use their QR badge.")) return;
+    if (!(await ask({ title: "Remove face data?", body: "Their face data and photo are deleted. They'll need to re-enroll or use their QR badge.", confirm: "Remove", danger: true }))) return;
     await api(`/api/admin/people/${id}/enroll`, { method: "DELETE" });
+    toast("Face data removed");
     load();
   };
 
@@ -170,8 +173,8 @@ function PersonPage() {
                 </span>
                 <span className="flex items-center gap-2">
                   {h.note && <span className="hidden text-xs text-muted sm:inline">“{h.note}”</span>}
-                  <Pill tone={h.method === "face" ? "good" : h.method === "qr" ? "info" : "muted"}>{h.method}</Pill>
-                  {h.late && <Pill tone="accent">Late</Pill>}
+                  <Pill>{({ face: "Face", qr: "QR badge", link: "Phone", manual: "Manual" } as Record<string, string>)[h.method] ?? h.method}</Pill>
+                  {h.late && <Pill tone="warn">Late</Pill>}
                   <span className="font-mono text-xs">{fmtTime(h.checked_in_at)}</span>
                 </span>
               </li>
@@ -268,7 +271,7 @@ function Badge({ person }: { person: Detail["person"] }) {
   }, [person.id, person.qr_version]);
 
   const reissue = async () => {
-    if (!confirm("Revoke the current badge and personal link and issue new ones? The old ones stop working immediately.")) return;
+    if (!(await ask({ title: "Issue a new badge and link?", body: "The current badge and personal link stop working immediately.", confirm: "Issue new", danger: true }))) return;
     setBusy(true);
     const r = await api<{ token: string; link: string | null }>(`/api/admin/people/${person.id}/badge`, { method: "POST" });
     setLink(r.link);

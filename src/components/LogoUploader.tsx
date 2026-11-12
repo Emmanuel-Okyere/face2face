@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { api, Button, cx, OrgLogo } from "@/components/ui";
+import { ask } from "@/components/feedback";
 
 const MAX_SIDE = 512;
 const MAX_BYTES = 280 * 1024;
@@ -78,7 +79,7 @@ export default function LogoUploader({
     }
   };
   const remove = async () => {
-    if (!confirm("Remove your logo and go back to the default?")) return;
+    if (!(await ask({ title: "Remove your logo?", body: "The default logo is used instead.", confirm: "Remove" }))) return;
     setBusy(true);
     await api("/api/admin/org/logo", { method: "DELETE" });
     onChange(null);

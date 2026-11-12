@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AdminShell";
-import { api, Button, Card, cx, Empty, Field, Input, Pill, Spinner, timeAgo } from "@/components/ui";
+import { api, Button, Card, cx, Empty, Field, Input, MoreMenu, Pill, Spinner, timeAgo } from "@/components/ui";
+import { ask, toast } from "@/components/feedback";
 
 type K = {
   id: string;
@@ -32,13 +33,15 @@ export default function Kiosks() {
     await load();
   };
   const revoke = async (k: K) => {
-    if (
-      !confirm(
-        `Revoke “${k.name}” permanently? The device is unpaired and must be paired again to be used.\n\nTo stop it for a while instead, use Pause.`,
-      )
-    )
-      return;
+    const ok = await ask({
+      title: `Revoke “${k.name}”?`,
+      body: "The device is unpaired and must be paired again to be used. To stop it for a while instead, use Pause.",
+      confirm: "Revoke",
+      danger: true,
+    });
+    if (!ok) return;
     await api(`/api/admin/kiosks?id=${k.id}`, { method: "DELETE" });
+    toast(`${k.name} revoked`);
     load();
   };
 
@@ -75,48 +78,30 @@ export default function Kiosks() {
               <Card key={k.id} className={cx(k.revoked_at && "opacity-60")}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{k.name}</div>
-                    {k.location && <div className="truncate text-sm text-ink/70">{k.location}</div>}
-                    <div className="text-xs text-muted">
-                      Paired {new Date(k.created_at).toLocaleDateString()}
-                      {k.created_by ? ` by ${k.created_by}` : ""}
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium">{k.name}</span>
+                      {k.revoked_at ? <Pill tone="danger">Revoked</Pill> : k.paused && <Pill tone="warn">Paused</Pill>}
                     </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                    {k.revoked_at ? (
-                      <Pill tone="danger">Revoked</Pill>
-                    ) : (
-                      <>
-                        {k.paused && <Pill tone="warn">Paused</Pill>}
-                        {!k.allow_qr && <Pill>QR off</Pill>}
-                        {k.voice_default && <Pill>Voice on</Pill>}
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4 flex items-end justify-between gap-2">
-                  <div>
-                    <div className="text-3xl tabular-nums">{k.checkins}</div>
-                    <div className="text-xs text-muted">check-ins · seen {k.last_seen_at ? timeAgo(k.last_seen_at) : "never"}</div>
+                    {k.location && <div className="truncate text-sm text-muted">{k.location}</div>}
                   </div>
                   {!k.revoked_at && (
-                    <div className="flex flex-wrap justify-end gap-1.5">
+                    <div className="flex shrink-0 items-center">
                       <Button variant="ghost" onClick={() => setEditing(k.id)}>
                         Edit
                       </Button>
-                      <Button variant="ghost" onClick={() => patch(k, { paused: !k.paused })}>
-                        {k.paused ? "Resume" : "Pause"}
-                      </Button>
+                      <MoreMenu
+                        items={[
+                          { label: k.paused ? "Resume" : "Pause", onClick: () => patch(k, { paused: !k.paused }) },
+                          { label: "Revoke", onClick: () => revoke(k), danger: true },
+                        ]}
+                      />
                     </div>
                   )}
                 </div>
-                {!k.revoked_at && (
-                  <div className="mt-3 border-t border-line pt-3 text-right">
-                    <button onClick={() => revoke(k)} className="text-xs text-muted hover:text-danger">
-                      Revoke permanently
-                    </button>
-                  </div>
-                )}
+                <div className="mt-4">
+                  <span className="text-3xl tabular-nums">{k.checkins}</span>
+                  <span className="ml-2 text-xs text-muted">check-ins · seen {k.last_seen_at ? timeAgo(k.last_seen_at) : "never"}</span>
+                </div>
               </Card>
             ),
           )}

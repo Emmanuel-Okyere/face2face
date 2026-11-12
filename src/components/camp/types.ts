@@ -1,0 +1,58 @@
+import type { FieldDef } from "@/lib/person-fields";
+import type { AgeGroup, FormConfig } from "./RegistrationForm";
+
+export type Ev = {
+  id: string;
+  name: string;
+  venue: string | null;
+  starts_on: string | null;
+  ends_on: string | null;
+  registration_open: boolean;
+  churches: string[];
+  age_groups: AgeGroup[];
+  child_age: number;
+  questions: FieldDef[];
+  public_token: string;
+  archived: boolean;
+  unit_label: string;
+  rooms_enabled: boolean;
+  buses_enabled: boolean;
+  form: FormConfig;
+};
+export type Room = { id: string; building: string; name: string; gender: "male" | "female" | "family"; beds: number; church: string | null; note: string | null };
+export type Bus = { id: string; name: string; seats: number; churches: string[]; pickup: string | null; departs: string | null; driver: string | null };
+export type Household = { id: string; church: string; contact_name: string; contact_phone: string | null; contact_email: string | null; code: string; pass_token: string; source: string; created_at: string };
+export type Person = {
+  id: string;
+  household_id: string;
+  full_name: string;
+  gender: "male" | "female" | null;
+  age: number | null;
+  age_group: string | null;
+  days: string[] | null;
+  relation: string | null;
+  phone: string | null;
+  needs_bus: boolean;
+  answers: Record<string, unknown>;
+  status: "registered" | "cancelled";
+  code: string;
+  room_id: string | null;
+  bed: number | null;
+  room_locked: boolean;
+  bus_id: string | null;
+  seat: number | null;
+  seat_locked: boolean;
+  arrived_at: string | null;
+  created_at: string;
+};
+export type EventData = {
+  event: Ev;
+  rooms: Room[];
+  buses: Bus[];
+  households: Household[];
+  people: Person[];
+  messages: Record<string, number>;
+  origin: string;
+  channels: { sms: boolean; email: boolean };
+};
+export type TabProps = { d: EventData; reload: () => Promise<void> };

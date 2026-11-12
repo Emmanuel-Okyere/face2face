@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -40,7 +40,9 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
     <input
       {...rest}
       className={cx(
-        "w-full rounded-xl border border-line bg-surface px-3.5 py-2 text-sm text-ink placeholder:text-muted/80",
+        // Full width unless the caller sizes it (w-20, flex-1, …) — otherwise both classes fight.
+        !/(^|\s)(w-|flex-1|basis-)/.test(className ?? "") && "w-full",
+        "rounded-xl border border-line bg-surface px-3.5 py-2 text-sm text-ink placeholder:text-muted/80",
         "focus:outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/5",
         className,
       )}
@@ -51,28 +53,138 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-muted">{label}</span>
+      <span className="block text-xs font-medium text-muted">{label}</span>
       {children}
       {hint && <span className="block text-xs text-muted">{hint}</span>}
     </label>
   );
 }
 
+/** Like Field, for groups of buttons (a <label> would forward clicks to the first button). */
+export function Group({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="space-y-1.5">
+      <span className="block text-xs font-medium text-muted">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+/** A "⋯" button with a few less-used actions (archive, delete…). */
+export function MoreMenu({ items, label = "More actions" }: { items: { label: string; onClick: () => void; danger?: boolean }[]; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={label}
+        aria-expanded={open}
+        className="flex size-9 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-ink"
+      >
+        <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
+          <circle cx="5" cy="12" r="1.6" fill="currentColor" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+          <circle cx="19" cy="12" r="1.6" fill="currentColor" />
+        </svg>
+      </button>
+      {open && (
+        <div className="card-shadow absolute right-0 z-30 mt-1 min-w-36 rounded-xl border border-line bg-surface p-1 text-sm">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                it.onClick();
+              }}
+              className={cx("block w-full rounded-lg px-3 py-1.5 text-left", it.danger ? "text-danger hover:bg-danger/5" : "hover:bg-surface-2")}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A number that counts up to its value on first show, then glides to new values
+ * (e.g. on the dashboard's live refresh). Plain text for reduced-motion users.
+ */
+export function CountUp({ value, format = String, duration = 700 }: { value: number; format?: (n: number) => string; duration?: number }) {
+  const [shown, setShown] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const start = from.current;
+    if (reduce || start === value) {
+      from.current = value;
+      const id = requestAnimationFrame(() => setShown(value));
+      return () => cancelAnimationFrame(id);
+    }
+    const t0 = performance.now();
+    let id = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / duration);
+      const eased = 1 - Math.pow(1 - k, 3);
+      const v = Math.round(start + (value - start) * eased);
+      setShown(v);
+      from.current = v;
+      if (k < 1) id = requestAnimationFrame(step);
+    };
+    id = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(id);
+  }, [value, duration]);
+  return <span aria-label={format(value)}>{format(shown)}</span>;
+}
+
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cx("card-shadow rounded-2xl border border-line/70 bg-surface p-5", className)}>{children}</div>;
 }
 
+/** Status colour for text: darker than the fill colours so it reads on the page without a background. */
+export const STATUS_TEXT = {
+  accent: "text-[#c4441a]",
+  good: "text-[#2e7d4f]",
+  warn: "text-[#9a5f0c]",
+  danger: "text-[#c23b31]",
+  info: "text-[#4458b8]",
+} as const;
+const STATUS_BG = {
+  accent: "bg-accent/[0.09]",
+  good: "bg-good/[0.11]",
+  warn: "bg-warn/[0.13]",
+  danger: "bg-danger/[0.09]",
+  info: "bg-info/[0.13]",
+} as const;
+
+/**
+ * A small label, all one shape: slightly rounded, no outline. The default is a
+ * quiet grey tag for plain facts ("Everyone", "built-in"); a tone adds a light
+ * tint and darker text for a status ("Open now", "Late after 09:00").
+ */
 export function Pill({ tone = "muted", children }: { tone?: "accent" | "good" | "warn" | "danger" | "info" | "muted"; children: ReactNode }) {
-  const tones = {
-    accent: "bg-accent/10 text-accent border-accent/25",
-    good: "bg-good-soft/70 text-good border-good/25",
-    warn: "bg-warn/12 text-warn border-warn/25",
-    danger: "bg-danger/12 text-danger border-danger/25",
-    info: "bg-info/12 text-info border-info/25",
-    muted: "bg-surface-2 text-muted border-line",
-  };
   return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", tones[tone])}>
+    <span
+      className={cx(
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-px text-[11px] leading-[18px]",
+        tone === "muted" ? "bg-surface-2 text-ink/65" : cx("font-medium", STATUS_BG[tone], STATUS_TEXT[tone]),
+      )}
+    >
       {children}
     </span>
   );

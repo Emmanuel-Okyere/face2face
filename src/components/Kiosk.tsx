@@ -522,14 +522,15 @@ function ResultCard({ outcome, onQr }: { outcome: Outcome; onQr?: () => void }) 
 }
 
 function Chip({ tone, children }: { tone: "accent" | "info" | "warn" | "danger" | "muted"; children: React.ReactNode }) {
-  const t = {
-    accent: "bg-good-soft text-good",
-    info: "bg-info/15 text-info",
-    warn: "bg-warn/15 text-warn",
-    danger: "bg-accent/10 text-accent",
-    muted: "bg-surface-2 text-muted",
+  // Same language as the admin labels, a size up for the kiosk screen.
+  const c = {
+    accent: "bg-good/[0.11] text-[#2e7d4f]",
+    info: "bg-info/[0.13] text-[#4458b8]",
+    warn: "bg-warn/[0.13] text-[#9a5f0c]",
+    danger: "bg-accent/[0.09] text-[#c4441a]",
+    muted: "bg-surface-2 text-ink/65",
   }[tone];
-  return <span className={cx("rounded-full px-3 py-1 font-medium", t)}>{children}</span>;
+  return <span className={cx("inline-flex items-center rounded-lg px-2.5 py-1 font-medium", c)}>{children}</span>;
 }
 
 function QrFrame() {

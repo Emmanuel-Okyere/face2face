@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMailEnabled, useMe } from "@/components/AdminShell";
 import { api, Avatar, Button, Card, Field, Input, Pill, Spinner, timeAgo } from "@/components/ui";
+import { askText, toast, toastError } from "@/components/feedback";
 
 type PA = { id: string; email: string; name: string; last_login_at: string | null; must_change_password: boolean; locked: boolean; orgs: number };
 
@@ -42,13 +43,20 @@ export default function PlatformAdmins() {
   };
 
   const revoke = async (a: PA) => {
-    const pw = prompt(`Remove ${a.email}'s access to all organizations?\n\nThey keep access to organizations they're a member of. Enter YOUR password to confirm:`);
+    const pw = await askText({
+      title: `Remove ${a.name || a.email}'s platform access?`,
+      body: "They keep access to organizations they're a member of.",
+      input: { label: "Your password", type: "password", autoComplete: "current-password" },
+      confirm: "Remove access",
+      danger: true,
+    });
     if (!pw) return;
     try {
       await api(`/api/platform/admins?id=${a.id}`, { method: "DELETE", json: { confirmPassword: pw } });
+      toast(`${a.name || a.email} is no longer a platform admin`);
       load();
     } catch (e) {
-      alert((e as Error).message);
+      toastError(e);
     }
   };
 

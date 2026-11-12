@@ -23,6 +23,7 @@ const NAV = [
   ["/admin", "Dashboard", "M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"],
   ["/admin/people", "People", "M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0"],
   ["/admin/services", "Services", "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"],
+  ["/admin/events", "Events", "M3 21h18M5 21V10l7-6 7 6v11M9 21v-6h6v6"],
   ["/admin/attendance", "Attendance", "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"],
   ["/admin/reports", "Reports", "M4 20V10M10 20V4M16 20v-7M22 20H2"],
   ["/admin/import", "Import", "M12 3v12m0 0-4-4m4 4 4-4M4 21h16"],
@@ -100,7 +101,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 <button
                   onClick={() => setOrgMenu((o) => !o)}
                   aria-expanded={orgMenu}
-                  className="flex max-w-[180px] items-center gap-1.5 rounded-full border border-line/80 bg-surface px-3 py-1.5 text-sm"
+                  className="flex max-w-[150px] items-center gap-1.5 rounded-full border border-line/80 bg-surface px-3 py-1.5 text-sm sm:max-w-[180px]"
                 >
                   <OrgLogo src={me.org?.logoUrl} name={me.org?.name ?? "Organization"} size={20} className="rounded-md" />
                   <span className="truncate font-medium">{me.org?.name ?? "Choose organization"}</span>
@@ -138,12 +139,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             )}
             <Suspense fallback={<div className="flex-1" />}>
               <NavLinks />
+              <MenuButton />
             </Suspense>
+            <div className="flex-1 md:hidden" />
             <div className="flex shrink-0 items-center gap-2">
               <Link
                 href="/kiosk"
                 title="Open kiosk"
-                className="hidden size-9 items-center justify-center rounded-full border border-line/80 bg-surface/70 text-ink/70 hover:text-ink sm:flex"
+                className="hidden size-9 items-center justify-center rounded-full border border-line/80 bg-surface/70 text-ink/70 hover:text-ink xl:flex"
               >
                 <Icon d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 0 0 5 0" />
               </Link>
@@ -181,7 +184,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1400px] min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <main className="mx-auto w-full max-w-[1400px] min-w-0 flex-1 px-4 pb-28 pt-6 sm:px-6 sm:pt-8 md:pb-8">
           {me && !me.org && !pathIsPlatform() ? (
             <div className="mx-auto max-w-md rounded-3xl border border-dashed border-line p-10 text-center">
               <p className="text-lg font-medium">You&apos;re not part of an organization yet</p>
@@ -198,6 +201,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             children
           )}
         </main>
+        <Suspense>
+          <BottomBar />
+        </Suspense>
       </div>
     </MeContext>
   );
@@ -207,28 +213,161 @@ function pathIsPlatform() {
   return typeof window !== "undefined" && window.location.pathname.startsWith("/admin/platform");
 }
 
-/** Reads the pathname, so it streams in its own boundary (Cache Components). */
+// Main sections get a pill on wide screens; the rest live under "More".
+const PRIMARY = new Set(["/admin", "/admin/people", "/admin/services", "/admin/events", "/admin/attendance", "/admin/reports"]);
+// Phone bottom bar: the four things people do most, plus More.
+const TABS = ["/admin", "/admin/people", "/admin/events", "/admin/attendance"];
+const SHORT: Record<string, string> = { "/admin": "Home" };
+const KIOSK_ICON = "M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 0 0 5 0";
+const MORE_ICON = "M4 6h16M4 12h16M4 18h16";
+
+const isActive = (path: string, href: string) => (href === "/admin" ? path === "/admin" : path.startsWith(href));
+
+/** Wide screens: pills for the main sections + a More dropdown. Reads the pathname, so it streams in its own boundary. */
 function NavLinks() {
   const path = usePathname();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  const more = NAV.filter(([href]) => !PRIMARY.has(href));
+  const activeMore = more.find(([href]) => isActive(path, href));
   return (
-    <nav className="-mx-1 flex flex-1 items-center gap-1 overflow-x-auto px-1 md:justify-center">
-      {NAV.map(([href, label, d]) => {
-        const active = href === "/admin" ? path === "/admin" : path.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={cx(
-              "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm transition",
-              active ? "bg-ink text-white" : "border border-line/80 bg-surface/70 text-ink/75 hover:bg-surface hover:text-ink",
-            )}
-          >
-            <Icon d={d} className="size-3.5" />
-            {label}
-          </Link>
-        );
-      })}
+    <nav className="hidden flex-1 items-center justify-center gap-1 xl:flex">
+      {NAV.filter(([href]) => PRIMARY.has(href)).map(([href, label, d]) => (
+        <Link
+          key={href}
+          href={href}
+          className={cx(
+            "flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm transition",
+            isActive(path, href) ? "bg-ink text-white" : "border border-line/80 bg-surface/70 text-ink/75 hover:bg-surface hover:text-ink",
+          )}
+        >
+          <Icon d={d} className="size-3.5" />
+          {label}
+        </Link>
+      ))}
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className={cx(
+            "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm transition",
+            activeMore ? "bg-ink text-white" : "border border-line/80 bg-surface/70 text-ink/75 hover:bg-surface hover:text-ink",
+          )}
+        >
+          {activeMore ? activeMore[1] : "More"} <span className="text-xs opacity-70">▾</span>
+        </button>
+        {open && (
+          <div className="card-shadow absolute right-0 z-40 mt-2 w-52 rounded-2xl border border-line bg-surface p-1.5 text-sm">
+            {more.map(([href, label, d]) => (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={cx("flex items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-surface-2", isActive(path, href) && "bg-surface-2 font-medium")}
+              >
+                <Icon d={d} className="size-4 text-muted" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </nav>
+  );
+}
+
+/** Every section as big tiles: the menu on tablets and the "More" sheet on phones. */
+function MenuSheet({ onClose }: { onClose: () => void }) {
+  const path = usePathname();
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal aria-label="Menu">
+      <button className="absolute inset-0 bg-ink/20 backdrop-blur-sm" onClick={onClose} aria-label="Close menu" />
+      <div className="card-shadow absolute inset-x-3 bottom-3 rounded-3xl border border-line bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:bottom-auto md:left-auto md:right-6 md:top-16 md:w-[26rem]">
+        <div className="grid grid-cols-3 gap-2">
+          {NAV.map(([href, label, d]) => (
+            <Link
+              key={href}
+              href={href}
+              onClick={onClose}
+              className={cx(
+                "flex flex-col items-center gap-1.5 rounded-2xl px-2 py-3.5 text-xs transition",
+                isActive(path, href) ? "bg-ink text-white" : "bg-surface-2/60 text-ink/80 hover:bg-surface-2",
+              )}
+            >
+              <Icon d={d} className="size-5" />
+              {label}
+            </Link>
+          ))}
+        </div>
+        <Link href="/kiosk" onClick={onClose} className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-line py-3 text-sm hover:bg-surface-2">
+          <Icon d={KIOSK_ICON} className="size-4" /> Open kiosk
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** Tablets / narrow windows: one Menu button in the header. */
+function MenuButton() {
+  const [open, setOpen] = useState(false);
+  const path = usePathname();
+  const current = NAV.find(([href]) => isActive(path, href));
+  return (
+    <div className="hidden flex-1 justify-end md:flex xl:hidden">
+      <button onClick={() => setOpen(true)} aria-expanded={open} className="flex items-center gap-2 rounded-full border border-line/80 bg-surface px-3.5 py-1.5 text-sm">
+        <Icon d={MORE_ICON} className="size-4" />
+        {current?.[1] ?? "Menu"}
+      </button>
+      {open && <MenuSheet onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+/** Phones: a bottom tab bar within thumb reach. */
+function BottomBar() {
+  const path = usePathname();
+  const [open, setOpen] = useState(false);
+  const inMore = !TABS.some((t) => isActive(path, t));
+  return (
+    <>
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line/70 bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-5">
+          {TABS.map((href) => {
+            const [, label, d] = NAV.find(([h]) => h === href)!;
+            const on = isActive(path, href);
+            return (
+              <Link key={href} href={href} className={cx("flex flex-col items-center gap-0.5 py-2 text-[11px]", on ? "text-ink" : "text-muted")}>
+                <span className={cx("flex h-7 w-12 items-center justify-center rounded-full transition", on && "bg-ink text-white")}>
+                  <Icon d={d} className="size-[18px]" />
+                </span>
+                {SHORT[href] ?? label}
+              </Link>
+            );
+          })}
+          <button onClick={() => setOpen(true)} className={cx("flex flex-col items-center gap-0.5 py-2 text-[11px]", inMore ? "text-ink" : "text-muted")}>
+            <span className={cx("flex h-7 w-12 items-center justify-center rounded-full", inMore && "bg-ink text-white")}>
+              <Icon d={MORE_ICON} className="size-[18px]" />
+            </span>
+            More
+          </button>
+        </div>
+      </nav>
+      {open && <MenuSheet onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

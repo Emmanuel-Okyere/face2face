@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { PageHeader, useMe } from "@/components/AdminShell";
 import ManualCheckIn from "@/components/ManualCheckIn";
-import { api, Avatar, Card, cx, Empty, fmtTime, Pill, Spinner } from "@/components/ui";
+import { api, Avatar, Card, CountUp, cx, Empty, fmtTime, Pill } from "@/components/ui";
 
 type Stats = {
   day: string;
@@ -30,6 +30,20 @@ type Stats = {
 };
 
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+
+const noop = () => () => {};
+
+/** The dashboard before its numbers arrive: the same layout at zero, so data can animate in. */
+function emptyStats(): Stats {
+  const today = new Date();
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const trend = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 13 + i);
+    return { day: iso(d), n: 0 };
+  });
+  return { day: iso(today), timeZone: "", totals: { people: 0, enrolled: 0, present: 0, late: 0 }, hourly: [], methods: [], groups: [], recent: [], trend, services: [] };
+}
 
 function greeting() {
   const h = new Date().getHours();
@@ -57,24 +71,21 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, [load]);
 
-  if (!s)
-    return err ? (
-      <Empty title="Couldn't load the dashboard">{err}</Empty>
-    ) : (
-      <div className="flex justify-center py-20">
-        <Spinner />
-      </div>
-    );
-
-  const { totals } = s;
+  // Draw only in the browser: the greeting and dates depend on the viewer's clock.
+  const mounted = useSyncExternalStore(noop, () => true, () => false);
+  if (!mounted) return null;
+  if (!s && err) return <Empty title="Couldn't load the dashboard">{err}</Empty>;
+  const loaded = !!s;
+  const data = s ?? emptyStats();
+  const { totals } = data;
   const absent = Math.max(0, totals.people - totals.present);
-  const yesterday = s.trend.at(-2)?.n ?? 0;
+  const yesterday = data.trend.at(-2)?.n ?? 0;
   const delta = totals.present - yesterday;
-  const method = (m: string) => s.methods.find((x) => x.method === m)?.n ?? 0;
+  const method = (m: string) => data.methods.find((x) => x.method === m)?.n ?? 0;
   const first = (me?.name || "").split(" ")[0];
 
   return (
-    <>
+    <div className="stagger">
       <PageHeader
         title={
           <>
@@ -92,35 +103,35 @@ export default function Dashboard() {
               <rect x="3" y="5" width="18" height="16" rx="2" />
               <path d="M16 3v4M8 3v4M3 10h18" />
             </svg>
-            <input type="date" value={day || s.day} onChange={(e) => setDay(e.target.value)} className="bg-transparent outline-none" aria-label="Day" />
+            <input type="date" value={day || data.day} onChange={(e) => setDay(e.target.value)} className="bg-transparent outline-none" aria-label="Day" />
           </label>
         }
       />
 
       {/* ── Stat cards ── */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Present today" value={totals.present} foot={<Delta n={delta} suffix="vs yesterday" />} href="/admin/attendance">
+      <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Present today" value={<CountUp value={totals.present} />} foot={<Delta n={delta} suffix="vs yesterday" />} href="/admin/attendance">
           <TwinBars a={yesterday} b={totals.present} max={Math.max(1, totals.people)} />
         </StatCard>
-        <StatCard title="Attendance rate" value={`${pct(totals.present, totals.people)}%`} foot={<span>{absent} not yet in</span>}>
+        <StatCard title="Attendance rate" value={<CountUp value={pct(totals.present, totals.people)} format={(n) => `${n}%`} />} foot={<span>{absent} not yet in</span>}>
           <Gauge value={pct(totals.present, totals.people)} />
         </StatCard>
         <StatCard
           title="Late arrivals"
-          value={String(totals.late).padStart(2, "0")}
+          value={<CountUp value={totals.late} format={(n) => String(n).padStart(2, "0")} />}
           foot={<span>across today&apos;s services</span>}
         >
           <DotMatrix filled={totals.late} total={Math.max(totals.present, 1)} />
         </StatCard>
-        <StatCard title="Face enrolled" value={totals.enrolled} foot={<span>of {totals.people} people</span>} href="/admin/people?status=pending">
+        <StatCard title="Face enrolled" value={<CountUp value={totals.enrolled} />} foot={<span>of {totals.people} people</span>} href="/admin/people?status=pending">
           <Blocks value={pct(totals.enrolled, totals.people)} />
         </StatCard>
       </div>
 
       {/* ── Today's services ── */}
-      {s.services.length > 0 && (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {s.services.map((sv) => (
+      {data.services.length > 0 && (
+        <div className="stagger mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {data.services.map((sv) => (
             <Card key={sv.id} className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -129,15 +140,12 @@ export default function Dashboard() {
                 </div>
                 {sv.status === "open" ? <Pill tone="good">Open</Pill> : sv.status === "upcoming" ? <Pill>Later</Pill> : <Pill>Closed</Pill>}
               </div>
-              <div className="mt-3 flex items-end justify-between">
-                <div className="text-3xl tabular-nums tracking-tight">
-                  {sv.present}
-                  <span className="text-base text-muted"> / {sv.expected}</span>
-                </div>
-                <div className="text-xs text-muted">{pct(sv.present, sv.expected)}%</div>
+              <div className="mt-3 text-3xl tabular-nums tracking-tight">
+                <CountUp value={sv.present} />
+                <span className="text-base text-muted"> / {sv.expected}</span>
               </div>
               <div className="hatch mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-                <div className="h-full rounded-full bg-good" style={{ width: `${Math.min(100, pct(sv.present, sv.expected))}%` }} />
+                <div className="h-full rounded-full bg-good transition-[width] duration-1000 ease-out" style={{ width: `${Math.min(100, pct(sv.present, sv.expected))}%` }} />
               </div>
             </Card>
           ))}
@@ -145,45 +153,44 @@ export default function Dashboard() {
       )}
 
       {/* ── Charts ── */}
-      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+      <div className="stagger mt-3 grid gap-3 xl:grid-cols-2">
         <Card>
           <CardHead title="Attendance rate" sub="Last 14 days" />
-          <RateBars data={s.trend} total={totals.people} selected={s.day} />
+          <RateBars data={data.trend} total={totals.people} selected={data.day} />
         </Card>
         <Card>
           <CardHead
             title="Arrivals by hour"
             right={
               <div className="flex gap-1.5">
-                <Pill tone="good">Face {method("face")}</Pill>
-                <Pill tone="info">QR {method("qr")}</Pill>
-                {method("link") > 0 && <Pill tone="good">Phone {method("link")}</Pill>}
+                <Pill>Face {method("face")}</Pill>
+                <Pill>QR {method("qr")}</Pill>
+                {method("link") > 0 && <Pill>Phone {method("link")}</Pill>}
                 <Pill>Manual {method("manual")}</Pill>
               </div>
             }
           />
-          <HourLine data={s.hourly} />
+          <HourLine key={loaded ? "data" : "empty"} data={data.hourly} />
         </Card>
       </div>
 
       {/* ── Lists ── */}
-      <div className="mt-3 grid gap-3 xl:grid-cols-3">
+      <div className="stagger mt-3 grid gap-3 xl:grid-cols-3">
         <Card>
           <CardHead title="Just checked in" right={<ArrowLink href="/admin/attendance" />} />
-          {s.recent.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted">No check-ins yet.</p>
+          {data.recent.length === 0 ? (
+            loaded && <p className="py-10 text-center text-sm text-muted">No check-ins yet.</p>
           ) : (
             <ul className="space-y-3">
-              {s.recent.slice(0, 7).map((r) => (
+              {data.recent.slice(0, 7).map((r) => (
                 <li key={r.id} className="flex items-center gap-3">
                   <Avatar src={r.avatar} name={r.full_name} size={34} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{r.full_name}</div>
                     <div className="truncate text-xs text-muted">{r.service}</div>
                   </div>
-                  <span className={cx("rounded-full px-2.5 py-1 text-[11px] font-medium", r.late ? "bg-accent/10 text-accent" : "bg-good-soft/70 text-good")}>
-                    {fmtTime(r.checked_in_at)}
-                  </span>
+                  {r.late && <Pill tone="warn">Late</Pill>}
+                  <span className="font-mono text-xs text-muted">{fmtTime(r.checked_in_at)}</span>
                 </li>
               ))}
             </ul>
@@ -192,15 +199,15 @@ export default function Dashboard() {
 
         <Card>
           <CardHead title="By group" />
-          {s.groups.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted">No people yet.</p>
-          ) : s.groups.every((g) => g.group_name === "—") ? (
+          {data.groups.length === 0 ? (
+            loaded && <p className="py-10 text-center text-sm text-muted">No people yet.</p>
+          ) : data.groups.every((g) => g.group_name === "—") ? (
             <p className="py-10 text-center text-sm text-muted">
               Not using groups. Give people a group (department, class, ministry…) to see a breakdown here.
             </p>
           ) : (
             <ul className="space-y-3.5">
-              {s.groups.map((g) => (
+              {data.groups.map((g) => (
                 <li key={g.group_name}>
                   <div className="mb-1.5 flex justify-between text-sm">
                     <span className="truncate">{g.group_name}</span>
@@ -209,7 +216,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="hatch h-2 overflow-hidden rounded-full bg-surface-2">
-                    <div className="h-full rounded-full bg-good" style={{ width: `${pct(g.present, g.total)}%` }} />
+                    <div className="h-full rounded-full bg-good transition-[width] duration-1000 ease-out" style={{ width: `${pct(g.present, g.total)}%` }} />
                   </div>
                 </li>
               ))}
@@ -222,7 +229,7 @@ export default function Dashboard() {
           <ManualCheckIn onDone={load} />
         </Card>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -283,10 +290,10 @@ function TwinBars({ a, b, max }: { a: number; b: number; max: number }) {
   return (
     <div className="flex h-12 items-end gap-1.5">
       <div className="hatch relative h-full w-5 overflow-hidden rounded-md bg-surface-2">
-        <div className="absolute inset-x-0 bottom-0 rounded-md bg-info/80" style={{ height: h(a) }} title={`Yesterday ${a}`} />
+        <div className="absolute inset-x-0 bottom-0 rounded-md bg-info/80 transition-[height] duration-700 ease-out" style={{ height: h(a) }} title={`Yesterday ${a}`} />
       </div>
       <div className="hatch relative h-full w-5 overflow-hidden rounded-md bg-surface-2">
-        <div className="absolute inset-x-0 bottom-0 rounded-md bg-good/80" style={{ height: h(b) }} title={`Today ${b}`} />
+        <div className="absolute inset-x-0 bottom-0 rounded-md bg-good/80 transition-[height] duration-700 ease-out" style={{ height: h(b), transitionDelay: "120ms" }} title={`Today ${b}`} />
       </div>
     </div>
   );
@@ -312,6 +319,7 @@ function Gauge({ value }: { value: number }) {
             stroke={on ? "var(--warn)" : "var(--line)"}
             strokeWidth="2.6"
             strokeLinecap="round"
+            style={{ transition: "stroke 0.25s ease-out", transitionDelay: `${i * 30}ms` }}
           />
         );
       })}
@@ -333,7 +341,7 @@ function DotMatrix({ filled, total }: { filled: number; total: number }) {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const idx = col * rows + (rows - 1 - row); // fill column-wise from bottom-left
-        return <span key={i} className={cx("size-1 rounded-full", idx < on ? "bg-accent" : "bg-line")} />;
+        return <span key={i} className={cx("size-1 rounded-full transition-colors duration-300", idx < on ? "bg-accent" : "bg-line")} style={{ transitionDelay: `${idx * 15}ms` }} />;
       })}
     </div>
   );
@@ -343,8 +351,10 @@ function Blocks({ value }: { value: number }) {
   return (
     <div className="flex items-end gap-1.5">
       <div className="flex h-12 w-9 flex-col justify-end">
-        <span className="mb-0.5 text-center text-[9px] text-muted">{value}%</span>
-        <div className="rounded-md bg-accent" style={{ height: `${Math.max(14, value * 0.32)}px` }} />
+        <span className="mb-0.5 text-center text-[9px] text-muted">
+          <CountUp value={value} format={(n) => `${n}%`} />
+        </span>
+        <div className="rounded-md bg-accent transition-[height] duration-700 ease-out" style={{ height: `${Math.max(14, value * 0.32)}px`, transitionDelay: "150ms" }} />
       </div>
       <div className="hatch h-8 w-9 rounded-md bg-surface-2" />
     </div>
@@ -364,7 +374,7 @@ function RateBars({ data, total, selected }: { data: { day: string; n: number }[
         <span>0</span>
       </div>
       <div className="flex h-48 flex-1 items-end gap-1.5">
-        {data.map((d) => {
+        {data.map((d, i) => {
           const dt = new Date(d.day + "T12:00:00");
           const rate = pct(d.n, total);
           const isFocus = d.day === focus;
@@ -377,8 +387,8 @@ function RateBars({ data, total, selected }: { data: { day: string; n: number }[
             >
               <div className="hatch relative w-full flex-1 overflow-visible rounded-lg bg-surface-2/60">
                 <div
-                  className={cx("absolute inset-x-0 bottom-0 rounded-lg transition-all", isFocus ? "bg-accent" : "bg-good-soft")}
-                  style={{ height: `${Math.max(2, rate)}%` }}
+                  className={cx("absolute inset-x-0 bottom-0 rounded-lg transition-[height,background-color] duration-700 ease-out", isFocus ? "bg-accent" : "bg-good-soft")}
+                  style={{ height: `${Math.max(2, rate)}%`, transitionDelay: `${i * 40}ms, 0ms` }}
                 />
                 {isFocus && (
                   <span
@@ -430,12 +440,12 @@ function HourLine({ data }: { data: { hour: number; n: number }[] }) {
     <div>
       <div className="hatch-v relative rounded-xl">
         <svg viewBox={`0 0 ${W} ${H}`} className="h-48 w-full" preserveAspectRatio="none" aria-label="Arrivals per hour">
-          <path d={d} fill="none" stroke="var(--accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          <path d={d} pathLength={1} className="draw" fill="none" stroke="var(--accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
         {peak.n > 0 && (
           <span
-            className="absolute -translate-x-1/2 -translate-y-[140%] rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-white"
-            style={{ left: `${(peak.x / W) * 100}%`, top: `${(peak.y / H) * 100}%` }}
+            className="fade-in absolute -translate-x-1/2 -translate-y-[140%] rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-white"
+            style={{ left: `${(peak.x / W) * 100}%`, top: `${(peak.y / H) * 100}%`, animationDelay: "1s" }}
           >
             {peak.n}
           </span>
@@ -449,3 +459,4 @@ function HourLine({ data }: { data: { hour: number; n: number }[] }) {
     </div>
   );
 }
+

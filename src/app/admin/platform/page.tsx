@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PageHeader, useMailEnabled, useMe } from "@/components/AdminShell";
 import PlatformAdmins from "@/components/PlatformAdmins";
 import { api, Button, Card, Empty, Field, hardNavigate, Input, OrgLogo, Pill, Spinner, timeAgo } from "@/components/ui";
+import { toastNextPage } from "@/components/feedback";
 
 type O = {
   id: string;
@@ -67,7 +68,8 @@ export default function Platform() {
             : undefined,
         },
       });
-      if (r.emailError) alert(r.emailError);
+      if (r.emailError) toastNextPage(r.emailError, "danger");
+      else toastNextPage(`${f.name} created`);
       hardNavigate("/admin/settings"); // the new org is now selected
     } catch (e) {
       setErr((e as Error).message);

@@ -53,19 +53,23 @@ export const GET = handle(async (req) => {
   if (span > 3 * 366) throw new HttpError(400, "Reports cover at most 3 years");
   const activeDays = [30, 60, 90].includes(Number(sp.get("active"))) ? Number(sp.get("active")) : 30;
   const serviceId = sp.get("service") && UUID.test(sp.get("service")!) ? sp.get("service")! : null;
+  // One group only (e.g. Children vs Adults). "—" = people with no group.
+  const group = (sp.get("group") || "").slice(0, 120) || null;
   const prevTo = addDays(from, -1);
   const prevFrom = addDays(from, -span);
   const bucket = span <= 62 ? "day" : span <= 400 ? "week" : "month";
   const o = org.id;
 
   const data = await tenant(org.id, async (sql) => {
-    const svc = serviceId ? sql`and service_id = ${serviceId}` : sql``;
+    const inGroup = group === "—" ? sql`group_name is null` : sql`group_name = ${group}`;
+    const pg = group ? sql`and person_id in (select id from people where org_id = ${o} and ${inGroup})` : sql``;
+    const svc = serviceId ? sql`and service_id = ${serviceId} ${pg}` : pg;
     const services = await listServices(sql, org);
     const people = await sql<PersonRow[]>`
       select p.id, p.full_name, p.ref, p.code, p.group_name, p.phone, p.avatar_url as avatar,
         (select max(a.day)::text from attendance a where a.person_id = p.id and a.day <= ${to}::date) as last_seen
       from people p
-      where p.org_id = ${o} and p.active and p.created_at::date <= ${to}::date
+      where p.org_id = ${o} and p.active and p.created_at::date <= ${to}::date ${group ? (group === "—" ? sql`and p.group_name is null` : sql`and p.group_name = ${group}`) : sql``}
       order by p.full_name`;
     const rows = await sql<Att[]>`
       select person_id, service_id, day::text from attendance
@@ -76,9 +80,9 @@ export const GET = handle(async (req) => {
     const [t] = await sql`
       select
         (select count(distinct person_id)::int from attendance
-          where org_id = ${o} and day > ${to}::date - ${activeDays}::int and day <= ${to}::date) as active_members,
+          where org_id = ${o} and day > ${to}::date - ${activeDays}::int and day <= ${to}::date ${pg}) as active_members,
         (select count(*)::int from (
-           select person_id, min(day) as first from attendance where org_id = ${o} group by person_id
+           select person_id, min(day) as first from attendance where org_id = ${o} ${pg} group by person_id
          ) f where f.first between ${from}::date and ${to}::date) as newcomers`;
     const series =
       bucket === "day"
@@ -99,7 +103,8 @@ export const GET = handle(async (req) => {
     const methods = await sql`
       select method::text as method, count(*)::int as n from attendance
       where org_id = ${o} and day between ${from}::date and ${to}::date ${svc} group by 1`;
-    return { services, people, rows, prevRows, t, series, methods };
+    const groupList = await sql`select distinct group_name from people where org_id = ${o} and group_name is not null order by 1`;
+    return { services, people, rows, prevRows, t, series, methods, groupList: groupList.map((g) => g.group_name as string) };
   });
 
   const svcById = new Map(data.services.map((s) => [s.id, s]));
@@ -240,6 +245,8 @@ export const GET = handle(async (req) => {
     series: data.series,
     methods: data.methods,
     groups: [...groups.values()].sort((a, b) => b.people - a.people),
+    groupList: data.groupList,
+    group,
     lists: {
       absent: { total: absent.length, people: absent.slice(0, LIST_LIMIT).map(strip) },
       drifting: { total: drifting.length, people: drifting.slice(0, LIST_LIMIT).map(strip) },

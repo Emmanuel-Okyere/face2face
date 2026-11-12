@@ -16,7 +16,8 @@ export const GET = handle(async (req) => {
     const by = new Map(stats.map((r) => [r.service_id, r]));
     return json({
       services: services.map((s) => ({ ...s, held: by.get(s.id)?.held ?? 0, checkins: by.get(s.id)?.checkins ?? 0, last_held: by.get(s.id)?.last_held ?? null })),
-      groups: groups.map((g) => g.group_name as string),
+      // The organization's own group list first, then any other group people already have.
+      groups: [...new Set([...(org.personFields.find((f) => f.key === "group_name")?.options ?? []), ...groups.map((g) => g.group_name as string)])],
     });
   });
 });
