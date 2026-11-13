@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -239,6 +240,32 @@ export function Logo({ className }: { className?: string }) {
       </svg>
       Face2Face
     </span>
+  );
+}
+
+/** Kiosk's way out. Signed in: back where you came from (else the admin). Signed out: the landing page. */
+export function BackButton({ signedIn, className }: { signedIn: boolean; className?: string }) {
+  const router = useRouter();
+  const go = () => {
+    if (!signedIn) return router.push("/");
+    let fromHere = false;
+    try {
+      fromHere = !!document.referrer && new URL(document.referrer).origin === location.origin && !/\/(login|kiosk)/.test(new URL(document.referrer).pathname);
+    } catch {}
+    if (fromHere && history.length > 1) history.back();
+    else router.push("/admin");
+  };
+  return (
+    <button
+      type="button"
+      onClick={go}
+      aria-label="Back"
+      className={cx("inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface/80 text-muted backdrop-blur transition hover:text-ink", className)}
+    >
+      <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+    </button>
   );
 }
 

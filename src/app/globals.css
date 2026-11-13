@@ -146,6 +146,15 @@ body {
 @keyframes grow-y { from { transform: scaleY(0); } }
 @keyframes grow-x { from { transform: scaleX(0); } }
 @keyframes fade-in { from { opacity: 0; } }
+@keyframes feed-in { from { opacity: 0; transform: translateY(-10px) scale(0.98); filter: blur(4px); } }
+.feed-in { animation: feed-in 0.5s cubic-bezier(.2,.8,.2,1) both; }
+/* sign-in feed: newcomer drops in from above with a soft green glow */
+@keyframes feed-drop {
+  0% { opacity: 0; transform: translateY(-28px) scale(0.96); box-shadow: 0 0 0 0 rgba(63,157,99,0); }
+  60% { opacity: 1; transform: translateY(2px) scale(1); box-shadow: 0 0 0 4px rgba(63,157,99,0.25); }
+  100% { transform: none; box-shadow: 0 0 0 0 rgba(63,157,99,0); }
+}
+.feed-drop { animation: feed-drop 0.7s cubic-bezier(.2,.8,.2,1) 0.35s both; } /* waits for the others to make room */
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .stagger > * { animation: rise 0.6s cubic-bezier(.2,.8,.2,1) both; }
 .stagger > *:nth-child(2) { animation-delay: 70ms; }
@@ -160,7 +169,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .land-brackets, .land-dots, .land-welcome, .land-hint, .toast-in, .dialog-in,
-  .skeleton, .stagger > *, .grow-y, .grow-x, .fade-in, .draw { animation: none; }
+  .skeleton, .stagger > *, .grow-y, .grow-x, .fade-in, .feed-in, .feed-drop, .draw { animation: none; }
   .land-dots { opacity: 0.55; }
   .land-hint { opacity: 0; }
 }

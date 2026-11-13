@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { api, Button, Card, Field, Input, Logo, OrgLogo, Spinner } from "@/components/ui";
+import { api, BackButton, Button, Card, Field, Input, Logo, OrgLogo, Spinner } from "@/components/ui";
 import { prefetchFaceModels } from "@/lib/face/models";
 
 const Kiosk = dynamic(() => import("@/components/Kiosk"), { ssr: false });
@@ -65,7 +65,8 @@ export default function KioskPage() {
     );
   if (s.kiosk?.paused)
     return (
-      <div className="grid-bg flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+      <div className="grid-bg relative flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+        <BackButton signedIn={!!s.admin} className="absolute left-6 top-4" />
         <OrgLogo src={s.kiosk.logoUrl} name={s.kiosk.org} size={72} />
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Check-in is paused</h1>
@@ -78,7 +79,8 @@ export default function KioskPage() {
     );
   if (s.kiosk && s.kiosk.open.length === 0)
     return (
-      <div className="grid-bg flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+      <div className="grid-bg relative flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+        <BackButton signedIn={!!s.admin} className="absolute left-6 top-4" />
         <OrgLogo src={s.kiosk.logoUrl} name={s.kiosk.org} size={72} />
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">No service right now</h1>
@@ -95,6 +97,7 @@ export default function KioskPage() {
         logoUrl={s.kiosk.logoUrl}
         allowQr={s.kiosk.allowQr}
         voice={s.kiosk.voiceDefault}
+        signedIn={!!s.admin}
       />
     );
 
@@ -112,7 +115,8 @@ export default function KioskPage() {
   };
 
   return (
-    <div className="grid-bg flex flex-1 items-center justify-center p-4">
+    <div className="grid-bg relative flex flex-1 items-center justify-center p-4">
+      <BackButton signedIn={!!s.admin} className="absolute left-6 top-4" />
       <Card className="w-full max-w-md space-y-5 p-7">
         <Logo />
         <div>

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { api, Button, Card, Field, Input, Logo, Spinner } from "@/components/ui";
+import { api, Button, Field, Input, Spinner } from "@/components/ui";
+import AuthShell from "@/components/AuthShell";
 
 type Info = { email: string; name: string; purpose: "invite" | "reset" };
 
@@ -46,13 +47,12 @@ export default function SetPassword() {
   };
 
   return (
-    <div className="grid-bg flex flex-1 items-center justify-center p-4">
-      <Card className="w-full max-w-sm space-y-6 p-7">
-        <Logo />
+    <AuthShell>
+      <div className="space-y-6">
         {bad ? (
           <>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">Link expired</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">Link expired</h1>
               <p className="mt-1 text-sm text-muted">This link has expired or was already used.</p>
             </div>
             <Link href="/forgot-password" className="block rounded-full bg-ink px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-ink/85">
@@ -66,7 +66,7 @@ export default function SetPassword() {
         ) : (
           <>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">{info.purpose === "invite" ? `Welcome, ${info.name.split(" ")[0] || "there"}` : "Choose a new password"}</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">{info.purpose === "invite" ? `Welcome, ${info.name.split(" ")[0] || "there"}` : "Choose a new password"}</h1>
               <p className="mt-1 text-sm text-muted">{info.email}</p>
             </div>
             <form onSubmit={submit} className="space-y-4">
@@ -85,7 +85,7 @@ export default function SetPassword() {
             </form>
           </>
         )}
-      </Card>
-    </div>
+      </div>
+    </AuthShell>
   );
 }

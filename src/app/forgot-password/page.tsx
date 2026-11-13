@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { api, Button, Card, Field, Input, Logo } from "@/components/ui";
+import { api, Button, Field, Input } from "@/components/ui";
+import AuthShell from "@/components/AuthShell";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -25,10 +26,9 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="grid-bg flex flex-1 items-center justify-center p-4">
-      <Card className="w-full max-w-sm space-y-6 p-7">
-        <Logo />
-        <h1 className="text-xl font-semibold tracking-tight">Reset password</h1>
+    <AuthShell>
+      <div className="space-y-6">
+        <h1 className="text-3xl font-semibold tracking-tight">Reset password</h1>
         {sent ? (
           <p className="text-sm">
             If <span className="font-medium">{email}</span> has an account, a reset link is on its way.
@@ -47,7 +47,7 @@ export default function ForgotPassword() {
         <Link href="/login" className="block text-center text-xs text-muted hover:text-ink">
           Back to sign in
         </Link>
-      </Card>
-    </div>
+      </div>
+    </AuthShell>
   );
 }

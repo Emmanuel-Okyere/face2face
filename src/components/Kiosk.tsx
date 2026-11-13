@@ -3,7 +3,7 @@
 import jsQR from "jsqr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chime, drawOverlay, nextFrame, sleep, useCamera } from "@/components/camera";
-import { Avatar, Button, cx, OrgLogo, Spinner } from "@/components/ui";
+import { Avatar, BackButton, Button, cx, OrgLogo, Spinner } from "@/components/ui";
 import { describe, distance, loadFaceApi, mean, observe, warmFaceEngine, type FaceObservation } from "@/lib/face/engine";
 import { STEP_COPY, StepDetector, type StepType } from "@/lib/face/liveness";
 import { assessQuality } from "@/lib/face/quality";
@@ -53,6 +53,7 @@ export default function Kiosk({
   allowQr = true,
   voice = false,
   service,
+  signedIn = false,
 }: {
   kioskName: string;
   orgName: string;
@@ -60,8 +61,10 @@ export default function Kiosk({
   allowQr?: boolean;
   voice?: boolean; // spoken greeting, set by an admin on the Kiosks page
   service?: string; // e.g. "Sunday Service · until 12:00"
+  signedIn?: boolean; // an admin is signed in on this device: Back returns to where they were
 }) {
-  const { videoRef, state: cam } = useCamera(true);
+  const [paused, setPaused] = useState(false);
+  const { videoRef, state: cam } = useCamera(!paused);
   // Load the face engine while the camera permission prompt is up, not after.
   useEffect(() => warmFaceEngine(), []);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -352,6 +355,7 @@ export default function Kiosk({
     <div className="grid-bg relative flex min-h-dvh flex-col">
       <header className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
+          <BackButton signedIn={signedIn} />
           <OrgLogo src={logoUrl} name={orgName} size={44} />
           <div>
             <div className="text-lg font-semibold leading-tight tracking-tight">{orgName}</div>
@@ -379,7 +383,19 @@ export default function Kiosk({
                 <div className="scanline absolute inset-x-0 h-1/3 bg-gradient-to-b from-transparent via-good/10 to-transparent" />
               </div>
             )}
-            {cam !== "ready" && <CameraMessage state={cam} />}
+            {cam === "off" ? (
+              <button onClick={() => setPaused(false)} className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+                <span className="flex size-16 items-center justify-center rounded-full bg-white/10">
+                  <svg viewBox="0 0 24 24" className="size-7" fill="currentColor" aria-hidden>
+                    <path d="M8 5.5v13l11-6.5z" />
+                  </svg>
+                </span>
+                <span className="text-lg font-medium">Camera paused</span>
+                <span className="text-sm text-white/60">Tap to resume</span>
+              </button>
+            ) : (
+              cam !== "ready" && <CameraMessage state={cam} />
+            )}
             {phase.k === "result" && (
               <ResultCard outcome={phase.outcome} onQr={allowQr ? () => setPhase({ k: "qr" }) : undefined} onVisitor={() => setPhase({ k: "visitor" })} />
             )}
@@ -402,6 +418,15 @@ export default function Kiosk({
                 )}
                 <Button variant="ghost" onClick={() => setPhase({ k: "visitor" })}>
                   I&apos;m visiting
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    if (!paused) toIdle();
+                    setPaused(!paused);
+                  }}
+                >
+                  {paused ? "Resume camera" : "Pause camera"}
                 </Button>
               </>
             )}

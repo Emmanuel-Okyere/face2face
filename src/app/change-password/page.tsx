@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { api, Button, Card, Field, Input, Logo } from "@/components/ui";
+import { api, Button, Field, Input } from "@/components/ui";
+import AuthShell from "@/components/AuthShell";
 
 /** First sign-in with a temporary password (bootstrap or admin-assigned) lands here. */
 export default function ChangePassword() {
@@ -27,11 +28,10 @@ export default function ChangePassword() {
   };
 
   return (
-    <div className="grid-bg flex flex-1 items-center justify-center p-4">
-      <Card className="w-full max-w-sm space-y-6 p-7">
-        <Logo />
+    <AuthShell>
+      <div className="space-y-6">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Set your own password</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Set your own password</h1>
           <p className="mt-1 text-sm text-muted">Choose a new password to continue.</p>
         </div>
         <form onSubmit={submit} className="space-y-4">
@@ -58,7 +58,7 @@ export default function ChangePassword() {
         >
           Sign out instead
         </button>
-      </Card>
-    </div>
+      </div>
+    </AuthShell>
   );
 }

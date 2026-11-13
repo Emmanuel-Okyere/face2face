@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FaceObservation } from "@/lib/face/engine";
 
-export type CameraState = "starting" | "ready" | "denied" | "unavailable";
+export type CameraState = "starting" | "ready" | "denied" | "unavailable" | "off";
 
 /** `facing`: "user" (selfie camera, for faces) or "environment" (back camera, for scanning passes). */
 export function useCamera(enabled = true, facing: "user" | "environment" = "user") {
@@ -38,7 +38,8 @@ export function useCamera(enabled = true, facing: "user" | "environment" = "user
     };
   }, [enabled, facing]);
 
-  return { videoRef, state };
+  // Turned off: the stream is stopped, whatever the last state was.
+  return { videoRef, state: enabled ? state : ("off" as CameraState) };
 }
 
 /**
