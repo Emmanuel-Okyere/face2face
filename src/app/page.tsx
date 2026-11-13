@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LandingWelcome from "@/components/LandingWelcome";
 import { Logo } from "@/components/ui";
 
 export default function Home() {
@@ -77,17 +78,7 @@ function KioskPreview() {
       </div>
 
       {/* welcome card that rises after the match */}
-      <div className="land-welcome card-shadow absolute -bottom-8 -left-4 flex w-[18rem] items-center gap-3 rounded-2xl border border-line/70 bg-surface p-3.5 pr-4 sm:-left-10">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-good-soft text-sm font-semibold text-good">AM</span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold leading-tight">Ama Mensah</div>
-          <div className="mt-0.5 truncate text-xs text-muted">Checked in at 8:42 am</div>
-        </div>
-        <svg viewBox="0 0 24 24" className="size-6 shrink-0" aria-hidden>
-          <circle cx="12" cy="12" r="11" fill="var(--good)" />
-          <path d="M7.5 12.3l3 3 6-6.3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
+      <LandingWelcome />
 
       {/* live count */}
       <div className="card-shadow absolute -right-2 -top-6 flex items-center gap-3 rounded-2xl border border-line/70 bg-surface px-4 py-3 sm:-right-8">
