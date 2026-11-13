@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SAMPLE_NAMES } from "@/lib/sample-names";
+import { nameBag } from "@/lib/sample-names";
 
 const TONES = ["bg-[#cfeed6] text-[#2e7d4f]", "bg-[#fde3d6] text-[#b8441a]", "bg-[#e3e6fb] text-[#4450a8]", "bg-[#f6ecc9] text-[#8a6410]"];
 const SLOTS = 3;
@@ -30,6 +30,7 @@ export default function AuthFeed() {
 
   useEffect(() => {
     let id = 0;
+    const nextName = nameBag();
     let min = 8 * 60 + 20 + rand(20);
     const timers = new Set<ReturnType<typeof setTimeout>>();
     const later = (fn: () => void, ms: number) => {
@@ -39,10 +40,10 @@ export default function AuthFeed() {
     const arrive = () => {
       min += 1 + rand(3);
       const at = min;
+      const name = nextName(); // drawn outside the updater, which React may run twice
       setRows((cur) => {
         const live = cur.filter((r) => !r.leaving);
-        const pool = SAMPLE_NAMES.filter((n) => !live.some((r) => r.name === n));
-        const row: Row = { id: ++id, name: pool[rand(pool.length)], min: at, tone: TONES[rand(TONES.length)], leaving: false };
+        const row: Row = { id: ++id, name, min: at, tone: TONES[rand(TONES.length)], leaving: false };
         return [row, ...live.map((r, i) => (i >= SLOTS - 1 ? { ...r, leaving: true } : r))];
       });
       setCount((c) => (c === null || c >= 196 ? 90 + rand(50) : c + 1));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SAMPLE_NAMES as NAMES } from "@/lib/sample-names";
+import { nameBag } from "@/lib/sample-names";
 
 
 const initials = (n: string) =>
@@ -29,16 +29,17 @@ export default function LandingWelcome() {
   const [cards, setCards] = useState<Card[]>([]);
   useEffect(() => {
     let id = 0;
+    const nextName = nameBag();
     const timers = new Set<ReturnType<typeof setTimeout>>();
     const later = (fn: () => void, ms: number) => {
       const t = setTimeout(() => (timers.delete(t), fn()), ms);
       timers.add(t);
     };
     const arrive = () => {
+      const name = nextName(); // drawn outside the updater, which React may run twice
       setCards((cur) => {
         const live = cur.filter((c) => !c.leaving);
-        const pool = NAMES.filter((n) => !live.some((c) => c.name === n));
-        const card = { id: ++id, name: pool[Math.floor(Math.random() * pool.length)], time: randomTime(), leaving: false };
+        const card = { id: ++id, name, time: randomTime(), leaving: false };
         return [card, ...live.map((c, i) => (i >= 1 ? { ...c, leaving: true } : c))];
       });
       later(() => setCards((cur) => cur.filter((c) => !c.leaving)), 700);
