@@ -33,6 +33,8 @@ type Detail = {
     avatar: string | null;
     active: boolean;
     consent_at: string | null;
+    is_visitor: boolean;
+    invited_by: string | null;
     qr_version: number;
     created_at: string;
   };
@@ -95,12 +97,25 @@ function PersonPage() {
             {p.group_name && <span>· {p.group_name}</span>}
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {d.embeddings.length ? <Pill tone="good">Face enrolled · {d.embeddings.length} photos</Pill> : <Pill tone="warn">No face data</Pill>}
+            {p.is_visitor && <Pill tone="info">Visitor{p.invited_by ? ` · invited by ${p.invited_by}` : ""}</Pill>}
+            {d.embeddings.length ? <Pill tone="good">Face enrolled · {d.embeddings.length} photos</Pill> : !p.is_visitor && <Pill tone="warn">No face data</Pill>}
             {!p.active && <Pill tone="danger">Inactive</Pill>}
             {p.consent_at && <Pill>Consent {new Date(p.consent_at).toLocaleDateString()}</Pill>}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {p.is_visitor && (
+            <Button
+              onClick={async () => {
+                if (!(await ask({ title: `Make ${p.full_name} a member?`, body: "They'll count in attendance rates and reports from now on. You can then enroll their face.", confirm: "Make member" }))) return;
+                await api(`/api/admin/people/${id}`, { method: "PATCH", json: { is_visitor: false } });
+                toast(`${p.full_name} is now a member`);
+                load();
+              }}
+            >
+              Make member
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => setEditing((e) => !e)}>
             Edit
           </Button>

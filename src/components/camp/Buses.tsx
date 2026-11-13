@@ -346,7 +346,7 @@ function CaptainLink({ d, bus, onClose, reload }: { d: TabProps["d"]; bus: Bus; 
           <div>
             <h3 className="font-medium">{bus.name} — captain&apos;s boarding list</h3>
             <p className="text-sm text-muted">
-              Give this to the bus captain. On their phone they scan passes or tap names as people get on, see who&apos;s still missing, and call or text them. No login needed — anyone with the link can board people on this bus.
+              For the bus captain&apos;s phone. No login needed.
             </p>
           </div>
           <div className="truncate rounded-xl bg-surface-2 px-3 py-2 font-mono text-xs">{url}</div>

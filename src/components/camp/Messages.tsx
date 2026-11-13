@@ -9,9 +9,9 @@ type Msg = { id: string; channel: "sms" | "email"; recipient: string; kind: stri
 type Kind = "registered" | "room" | "bus" | "broadcast";
 
 const ACTIONS: { kind: Exclude<Kind, "broadcast">; title: string; text: string }[] = [
-  { kind: "registered", title: "Pass links", text: "Anyone who hasn't had their pass yet (e.g. registered by an admin)." },
-  { kind: "room", title: "Room details", text: "Everyone's rooms and beds, one SMS per registration. Press again after changes: only those whose rooms changed get a new SMS." },
-  { kind: "bus", title: "Bus seats", text: "Bus, seat numbers, pickup point and time. Again, only new or changed seats are sent." },
+  { kind: "registered", title: "Pass links", text: "Anyone without a pass yet." },
+  { kind: "room", title: "Room details", text: "Only new or changed rooms are sent." },
+  { kind: "bus", title: "Bus seats", text: "Only new or changed seats are sent." },
 ];
 
 export default function Messages({ d, reload }: TabProps) {

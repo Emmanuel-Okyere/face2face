@@ -36,6 +36,8 @@ type Result =
       late: boolean;
       rank: number;
       streak: number;
+      visitor?: boolean;
+      visits?: number;
     }
   | { result: "not_you" | "liveness_failed" | "no_service"; reason?: string };
 
@@ -43,6 +45,7 @@ type Stage =
   | { k: "loading" }
   | { k: "invalid"; msg: string }
   | { k: "intro" }
+  | { k: "visitor" }
   | { k: "scan"; hint: string; steps?: StepType[]; idx?: number; capturing?: boolean }
   | { k: "verifying" }
   | { k: "result"; r: Result };
@@ -160,7 +163,16 @@ export default function SelfCheckIn({ slug, k, p }: { slug: string; k: string | 
             <Button variant="good" className="mt-5 w-full py-3 text-base" onClick={start} loading={busy} disabled={info.mode === "shared" && !code.trim()}>
               Check in with my face
             </Button>
+            {info.mode === "shared" && (
+              <button onClick={() => (setErr(""), setStage({ k: "visitor" }))} className="mt-4 w-full text-center text-sm text-muted hover:text-ink">
+                First time here? <span className="font-medium text-ink underline underline-offset-2">Check in as a visitor</span>
+              </button>
+            )}
           </Panel>
+        )}
+
+        {stage.k === "visitor" && info?.service && k && (
+          <VisitorPanel slug={slug} k={k} needsLocation={!!info.locationRequired} onBack={() => setStage({ k: "intro" })} onDone={(res) => setStage({ k: "result", r: res })} />
         )}
 
         {(stage.k === "scan" || stage.k === "verifying") && challenge && (
@@ -340,7 +352,9 @@ function ResultPanel({ r, onRetry }: { r: Result; onRetry: () => void }) {
             <Avatar src={r.person.avatar} name={r.person.full_name} size={84} />
           </div>
           <div className="text-2xl font-semibold tracking-tight">{r.person.full_name}</div>
-          <div className="text-sm text-muted">{r.person.code}</div>
+          <div className="text-sm text-muted">
+            {r.visitor ? ((r.visits ?? 1) <= 1 ? "First visit — we're glad you came" : `Visit ${r.visits} — good to see you again`) : r.person.code}
+          </div>
           <div className="mt-5 grid grid-cols-2 gap-3 text-left">
             <div className="rounded-2xl bg-good-soft/60 p-4">
               <div className="text-xs text-good">Check in</div>
@@ -367,6 +381,61 @@ function ResultPanel({ r, onRetry }: { r: Result; onRetry: () => void }) {
           Try again
         </Button>
       </div>
+    </Panel>
+  );
+}
+
+/** "First time here?" — a short form; the visitor is saved and checked in. */
+function VisitorPanel({ slug, k, needsLocation, onBack, onDone }: { slug: string; k: string; needsLocation: boolean; onBack: () => void; onDone: (r: Result) => void }) {
+  const [f, setF] = useState({ full_name: "", phone: "", invited_by: "" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const location = needsLocation ? await getLocation() : undefined;
+      const r = await fetch(`/api/checkin/${encodeURIComponent(slug)}/visitor`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...f, k, location }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      onDone(d as Result);
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Panel>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <p className="text-lg font-medium">Welcome!</p>
+          <p className="text-sm text-muted">We&apos;re glad you&apos;re here. Tell us your name to check in.</p>
+        </div>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted">Your name</span>
+          <Input required autoFocus autoComplete="name" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} className="py-3 text-base" />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted">Phone (optional)</span>
+          <Input type="tel" inputMode="tel" autoComplete="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="024 123 4567" className="py-3 text-base" />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted">Who invited you? (optional)</span>
+          <Input value={f.invited_by} onChange={(e) => setF({ ...f, invited_by: e.target.value })} className="py-3 text-base" />
+        </label>
+        {err && <p className="text-sm text-danger">{err}</p>}
+        <Button type="submit" variant="good" className="w-full py-3 text-base" loading={busy}>
+          Check me in
+        </Button>
+        <button type="button" onClick={onBack} className="w-full text-center text-sm text-muted hover:text-ink">
+          I&apos;m a member
+        </button>
+      </form>
     </Panel>
   );
 }

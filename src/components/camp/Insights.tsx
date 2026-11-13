@@ -195,7 +195,7 @@ export default function Insights({ d }: TabProps) {
 
       {(e.rooms_enabled || e.buses_enabled) && (
         <Card>
-          <Title title="Capacity" sub="What's set up against what's needed" />
+          <Title title="Capacity" />
           <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
             {e.rooms_enabled && <Meter label="All beds" used={live.filter((p) => p.room_id).length} total={d.rooms.reduce((n, r) => n + r.beds, 0)} need={live.length} />}
             {e.rooms_enabled &&

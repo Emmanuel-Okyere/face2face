@@ -12,12 +12,18 @@ export const GET = handle(async (req) => {
   // One tenant transaction, queries in sequence (a transaction is one connection).
   return tenant(org.id, async (sql) => {
     // "Present" = people (not check-ins): someone at two services counts once.
+    // Members only: visitors are counted on their own so rates stay honest.
+    const members = sql`and person_id in (select id from people where org_id = ${o} and not is_visitor)`;
     const [totals] = await sql`
       select
-        (select count(*)::int from people where org_id = ${o} and active) as people,
+        (select count(*)::int from people where org_id = ${o} and active and not is_visitor) as people,
         (select count(distinct person_id)::int from face_embeddings where org_id = ${o}) as enrolled,
-        (select count(distinct person_id)::int from attendance where org_id = ${o} and day = ${day}::date) as present,
-        (select count(distinct person_id)::int from attendance where org_id = ${o} and day = ${day}::date and late) as late`;
+        (select count(distinct person_id)::int from attendance where org_id = ${o} and day = ${day}::date ${members}) as present,
+        (select count(distinct person_id)::int from attendance where org_id = ${o} and day = ${day}::date and late ${members}) as late,
+        (select count(distinct a.person_id)::int from attendance a join people p on p.id = a.person_id
+          where a.org_id = ${o} and a.day = ${day}::date and p.is_visitor) as visitors,
+        (select count(*)::int from people p where p.org_id = ${o} and p.is_visitor
+          and (select min(a.day) from attendance a where a.person_id = p.id) = ${day}::date) as first_time`;
     const hourly = await sql`
       select extract(hour from checked_in_at at time zone ${tz})::int as hour, count(*)::int as n
       from attendance where org_id = ${o} and day = ${day}::date group by 1 order by 1`;
@@ -27,22 +33,22 @@ export const GET = handle(async (req) => {
       select coalesce(p.group_name, '—') as group_name, count(*)::int as total,
         count(*) filter (where exists (select 1 from attendance a where a.person_id = p.id and a.day = ${day}::date))::int as present
       from people p
-      where p.org_id = ${o} and p.active group by 1 order by total desc limit 12`;
+      where p.org_id = ${o} and p.active and not p.is_visitor group by 1 order by total desc limit 12`;
     const recent = await sql`
       select a.id, a.checked_in_at, a.method::text as method, a.late, s.name as service,
-        p.full_name, p.ref, p.code, p.avatar_url as avatar, p.group_name
+        p.full_name, p.ref, p.code, p.avatar_url as avatar, p.group_name, p.is_visitor
       from attendance a join people p on p.id = a.person_id join services s on s.id = a.service_id
       where a.org_id = ${o} and a.day = ${day}::date order by a.checked_in_at desc limit 12`;
     const trend = await sql`
       select d::date::text as day,
-        (select count(distinct person_id)::int from attendance where org_id = ${o} and day = d::date) as n
+        (select count(distinct person_id)::int from attendance where org_id = ${o} and day = d::date ${members}) as n
       from generate_series(${day}::date - 13, ${day}::date, interval '1 day') d order by d`;
 
     // The day's services, with who came vs who was expected.
     const services = (await listServices(sql, org)).filter((s) => occursOn(s, day));
     const counts = await sql`
-      select service_id, count(*)::int as n from attendance where org_id = ${o} and day = ${day}::date group by 1`;
-    const people = await sql<{ group_name: string | null }[]>`select group_name from people where org_id = ${o} and active`;
+      select service_id, count(*)::int as n from attendance where org_id = ${o} and day = ${day}::date ${members} group by 1`;
+    const people = await sql<{ group_name: string | null }[]>`select group_name from people where org_id = ${o} and active and not is_visitor`;
     const now = localNow(tz);
     const byService = new Map(counts.map((c) => [c.service_id, c.n as number]));
     const todays = services.map((s) => {

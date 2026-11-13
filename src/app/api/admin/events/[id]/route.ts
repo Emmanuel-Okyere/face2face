@@ -40,7 +40,7 @@ export const PUT = handle<Ctx>(async (req, { params }) => {
       update events set name = ${e.name}, venue = ${e.venue}, starts_on = ${e.starts_on}, ends_on = ${e.ends_on},
         registration_open = ${e.registration_open}, churches = ${e.churches}, age_groups = ${sql.json(e.age_groups as never)},
         child_age = ${e.child_age}, unit_label = ${e.unit_label}, rooms_enabled = ${e.rooms_enabled}, buses_enabled = ${e.buses_enabled},
-        form = ${sql.json(e.form as never)}, questions = ${sql.json(e.questions as never)}, archived = ${e.archived ?? false}
+        form = ${sql.json(e.form as never)}, meals_enabled = ${e.meals_enabled}, meals_mode = ${e.meals_mode}, meals = ${sql.json(e.meals as never)}, questions = ${sql.json(e.questions as never)}, archived = ${e.archived ?? false}
       where id = ${id}`;
   });
   return json({ ok: true });

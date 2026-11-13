@@ -20,10 +20,10 @@ export const POST = handle(async (req) => {
   const e = await body(req, eventSchema);
   checkEvent(e);
   const [row] = await tenant(org.id, (sql) => sql`
-    insert into events (name, venue, starts_on, ends_on, registration_open, churches, age_groups, child_age, unit_label, questions, rooms_enabled, buses_enabled, form)
+    insert into events (name, venue, starts_on, ends_on, registration_open, churches, age_groups, child_age, unit_label, questions, rooms_enabled, buses_enabled, form, meals_enabled, meals_mode, meals)
     values (${e.name}, ${e.venue}, ${e.starts_on}, ${e.ends_on}, ${e.registration_open}, ${e.churches},
             ${sql.json(e.age_groups as never)}, ${e.child_age}, ${e.unit_label}, ${sql.json(e.questions as never)},
-            ${e.rooms_enabled}, ${e.buses_enabled}, ${sql.json(e.form as never)})
+            ${e.rooms_enabled}, ${e.buses_enabled}, ${sql.json(e.form as never)}, ${e.meals_enabled}, ${e.meals_mode}, ${sql.json(e.meals as never)})
     returning id`);
   return json({ id: row.id }, 201);
 });

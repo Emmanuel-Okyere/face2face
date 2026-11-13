@@ -20,6 +20,8 @@ type Row = {
   avatar: string | null;
   active: boolean;
   embeddings: number;
+  is_visitor: boolean;
+  visits: number;
   today_at: string | null;
 };
 
@@ -56,7 +58,7 @@ function People() {
     <>
       <PageHeader
         title="People"
-        subtitle={data ? `${data.total} ${status === "pending" ? "awaiting face enrollment" : status === "enrolled" ? "enrolled" : "people"}` : " "}
+        subtitle={data ? `${data.total} ${status === "pending" ? "awaiting face enrollment" : status === "enrolled" ? "enrolled" : status === "visitors" ? (data.total === 1 ? "visitor" : "visitors") : "people"}` : " "}
         actions={
           <>
             <Button variant="ghost" onClick={() => hardNavigate("/api/admin/people?format=csv")}>
@@ -85,6 +87,7 @@ function People() {
             ["all", "All"],
             ["enrolled", "Enrolled"],
             ["pending", "Needs face"],
+            ["visitors", "Visitors"],
           ].map(([v, l]) => (
             <button
               key={v}
@@ -140,7 +143,13 @@ function People() {
                       </td>
                     ))}
                     <td className="px-3 py-3">
-                      {p.embeddings ? <Pill tone="good">{p.embeddings} photos</Pill> : <Pill tone="warn">Needs enrollment</Pill>}
+                      {p.is_visitor ? (
+                        <Pill tone="info">Visitor · {p.visits === 1 ? "1 visit" : `${p.visits} visits`}</Pill>
+                      ) : p.embeddings ? (
+                        <Pill tone="good">{p.embeddings} photos</Pill>
+                      ) : (
+                        <Pill tone="warn">Needs enrollment</Pill>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-right">
                       {p.today_at ? <Pill tone="good">Present · {fmtTime(p.today_at)}</Pill> : <Pill>Not in</Pill>}

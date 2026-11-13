@@ -9,7 +9,7 @@ export const GET = handle(async (req) => {
   const { org } = await requireOrg(req);
   const sp = req.nextUrl.searchParams;
   const q = (sp.get("q") || "").trim();
-  const status = sp.get("status") || "all"; // all | enrolled | pending
+  const status = sp.get("status") || "all"; // all | enrolled | pending | visitors
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const today = todayIn(org.timeZone);
   // "024 123 4567" should find +233241234567: drop the local trunk 0.
@@ -61,10 +61,13 @@ export const GET = handle(async (req) => {
           or replace(p.ref, '-', '') ilike ${"%" + q.toUpperCase().replace(/[\s-]/g, "") + "%"}
           ${phoneDigits.length >= 4 ? sql`or p.phone like ${"%" + phoneDigits + "%"}` : sql``})`,
       status === "enrolled" && sql`exists (select 1 from face_embeddings e where e.person_id = p.id)`,
-      status === "pending" && sql`not exists (select 1 from face_embeddings e where e.person_id = p.id)`,
+      // Visitors aren't waiting for face enrollment; they have their own filter.
+      status === "pending" && sql`not exists (select 1 from face_embeddings e where e.person_id = p.id) and not p.is_visitor`,
+      status === "visitors" && sql`p.is_visitor`,
     ]);
     return sql`
       select p.id, p.ref, p.code, p.full_name, p.group_name, p.email, p.phone, p.attributes, p.avatar_url as avatar, p.active, p.created_at,
+        p.is_visitor, p.invited_by, (select count(distinct a.day)::int from attendance a where a.person_id = p.id) as visits,
         (select count(*)::int from face_embeddings e where e.person_id = p.id) as embeddings,
         (select a.checked_in_at from attendance a where a.person_id = p.id and a.day = ${today}::date) as today_at,
         count(*) over()::int as total

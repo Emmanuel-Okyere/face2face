@@ -25,7 +25,7 @@ export const GET = handle(async (req) => {
     const where = sql`and`.join([
       sql`a.org_id = ${org.id}`,
       sql`a.day between ${from}::date and ${to}::date`,
-      !!method && ["face", "qr", "manual", "link"].includes(method) && sql`a.method = ${method}::attendance_method`,
+      !!method && ["face", "qr", "manual", "link", "visitor"].includes(method) && sql`a.method = ${method}::attendance_method`,
       !!service && /^[0-9a-f-]{36}$/i.test(service) && sql`a.service_id = ${service}`,
       !!q &&
         sql`(p.full_name ilike ${"%" + q + "%"} or p.code ilike ${"%" + q + "%"} or p.group_name ilike ${"%" + q + "%"}

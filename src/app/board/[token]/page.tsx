@@ -36,6 +36,7 @@ function Board() {
   const [q, setQ] = useState("");
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState("");
+  const [church, setChurch] = useState("");
 
   const load = useCallback(
     () =>
@@ -89,7 +90,11 @@ function Board() {
   const missing = mine.filter((p) => p.assignedHere && (p.status === "missing" || p.status === "elsewhere"));
   const skipped = mine.filter((p) => p.status === "skipped");
   const expected = mine.filter((p) => p.assignedHere && p.status !== "skipped").length + on.filter((p) => !p.assignedHere).length;
-  const lists: Record<Tab, Person[]> = { missing, on, skipped };
+  // A bus carrying several churches: each church's count, and a filter so leaders can chase their own people.
+  const churches = [...new Set(mine.map((p) => p.church))].sort();
+  const byChurch = churches.map((c) => ({ c, on: on.filter((p) => p.church === c).length, of: mine.filter((p) => p.church === c && p.status !== "skipped").length }));
+  const ofChurch = (list: Person[]) => (church ? list.filter((p) => p.church === church) : list);
+  const lists: Record<Tab, Person[]> = { missing: ofChurch(missing), on: ofChurch(on), skipped: ofChurch(skipped) };
   const needle = q.trim().toLowerCase();
   const shown = needle ? d.people.filter((p) => p.name.toLowerCase().includes(needle)) : lists[tab];
   const pct = expected ? Math.round((on.length / expected) * 100) : 0;
@@ -139,17 +144,17 @@ function Board() {
             Scan passes
           </button>
           <button
-            disabled={!d.sms || !missing.length || busy === "sms"}
+            disabled={!d.sms || !lists.missing.length || busy === "sms"}
             onClick={async () => {
               const ok = await ask({
-                title: `Text the ${missing.length} missing?`,
+                title: `Text the ${lists.missing.length} missing${church ? ` from ${church}` : ""}?`,
                 body: `Each gets: “${d.bus.name} is about to leave${d.bus.pickup ? ` from ${d.bus.pickup}` : ""}. … not on board yet — please come now.”`,
                 confirm: "Send SMS",
               });
               if (!ok) return;
               setBusy("sms");
               try {
-                const r = await api<{ sent: number; noPhone?: number }>(`/api/board/${token}`, { method: "POST", json: { trip, action: "sms" } });
+                const r = await api<{ sent: number; noPhone?: number }>(`/api/board/${token}`, { method: "POST", json: { trip, action: "sms", church: church || undefined } });
                 toast(`${r.sent} SMS sent${r.noPhone ? ` · ${r.noPhone} have no phone` : ""}`);
               } catch (e) {
                 toastError(e);
@@ -172,13 +177,27 @@ function Board() {
         className="mt-4 w-full rounded-2xl border border-line bg-surface px-4 py-3 text-sm outline-none focus:border-ink/30"
       />
 
+      {!needle && churches.length > 1 && (
+        <div className="-mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 text-sm">
+          {[{ c: "", on: on.length, of: expected }, ...byChurch].map((x) => (
+            <button
+              key={x.c}
+              onClick={() => setChurch(x.c)}
+              className={cx("shrink-0 rounded-xl border px-3 py-1.5", church === x.c ? "border-ink bg-ink text-white" : "border-line bg-surface", x.of > 0 && x.on >= x.of && church !== x.c && "text-[#2e7d4f]")}
+            >
+              {x.c || "All"} <span className="tabular-nums opacity-70">{x.on}/{x.of}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {!needle && (
         <div className="mt-3 flex gap-1 text-sm">
           {(
             [
-              ["missing", `Missing ${missing.length}`],
-              ["on", `On board ${on.length}`],
-              ["skipped", `Not coming ${skipped.length}`],
+              ["missing", `Missing ${lists.missing.length}`],
+              ["on", `On board ${lists.on.length}`],
+              ["skipped", `Not coming ${lists.skipped.length}`],
             ] as const
           ).map(([t, l]) => (
             <button key={t} onClick={() => setTab(t)} className={cx("rounded-full px-3 py-1.5", tab === t ? "bg-ink text-white" : "text-muted")}>

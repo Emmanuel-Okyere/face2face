@@ -57,7 +57,7 @@ export async function matchDescriptor(sql: Tx, org: Org, descriptor: number[]): 
   return { status: "match", person: best, distance: best.distance, margin };
 }
 
-export type Method = "face" | "qr" | "manual" | "link";
+export type Method = "face" | "qr" | "manual" | "link" | "visitor";
 
 export type CheckInExtras = {
   distance?: number | null;

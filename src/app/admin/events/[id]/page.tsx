@@ -15,11 +15,12 @@ const tabs = {
   insights: dynamic(() => import("@/components/camp/Insights")),
   rooms: dynamic(() => import("@/components/camp/Rooms")),
   buses: dynamic(() => import("@/components/camp/Buses")),
+  meals: dynamic(() => import("@/components/camp/Meals")),
   messages: dynamic(() => import("@/components/camp/Messages")),
   setup: dynamic(() => import("@/components/camp/Setup")),
 };
 type Tab = keyof typeof tabs;
-const LABELS: Record<Tab, string> = { people: "People", insights: "Insights", rooms: "Rooms", buses: "Buses", messages: "Messages", setup: "Setup" };
+const LABELS: Record<Tab, string> = { people: "People", insights: "Insights", rooms: "Rooms", buses: "Buses", meals: "Meals", messages: "Messages", setup: "Setup" };
 
 function EventPage() {
   const { id } = useParams<{ id: string }>();

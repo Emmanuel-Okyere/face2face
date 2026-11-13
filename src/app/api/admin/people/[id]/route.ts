@@ -12,7 +12,8 @@ export const GET = handle<Ctx>(async (req, { params }) => {
   const id = uuid.parse((await params).id);
   return tenant(org.id, async (sql) => {
     const [person] = await sql`
-      select id, ref, code, full_name, group_name, email, phone, attributes, avatar_url as avatar, active, consent_at, qr_version, created_at
+      select id, ref, code, full_name, group_name, email, phone, attributes, avatar_url as avatar, active, consent_at, qr_version, created_at,
+        is_visitor, invited_by
       from people where id = ${id}`;
     if (!person) throw new HttpError(404, "Not found");
     const embeddings = await sql`
@@ -31,6 +32,9 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
   const id = uuid.parse((await params).id);
   const raw = await body(req, z.record(z.string(), z.unknown()));
   const active = typeof raw.active === "boolean" ? raw.active : null;
+  // "Make member": a visitor joins (one way; members are never turned back into visitors).
+  const makeMember = raw.is_visitor === false;
+  delete raw.is_visitor;
   const { values: p, errors } = validatePerson(org.personFields, raw, { partial: true });
   if (Object.keys(errors).length) return json({ error: Object.values(errors)[0], fieldErrors: errors }, 422);
   const has = (k: string) => k in p;
@@ -46,6 +50,7 @@ export const PATCH = handle<Ctx>(async (req, { params }) => {
         -- merge custom values; a null clears that one value
         attributes = jsonb_strip_nulls(attributes || ${sql.json(attrs as never)}),
         active = coalesce(${active}, active),
+        is_visitor = case when ${makeMember} then false else is_visitor end,
         updated_at = now()
       where id = ${id} returning id`);
     if (!row) throw new HttpError(404, "Not found");

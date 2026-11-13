@@ -62,14 +62,17 @@ export const GET = handle(async (req) => {
 
   const data = await tenant(org.id, async (sql) => {
     const inGroup = group === "—" ? sql`group_name is null` : sql`group_name = ${group}`;
-    const pg = group ? sql`and person_id in (select id from people where org_id = ${o} and ${inGroup})` : sql``;
+    // Members only (visitors are reported separately), optionally one group.
+    const pg = group
+      ? sql`and person_id in (select id from people where org_id = ${o} and not is_visitor and ${inGroup})`
+      : sql`and person_id in (select id from people where org_id = ${o} and not is_visitor)`;
     const svc = serviceId ? sql`and service_id = ${serviceId} ${pg}` : pg;
     const services = await listServices(sql, org);
     const people = await sql<PersonRow[]>`
       select p.id, p.full_name, p.ref, p.code, p.group_name, p.phone, p.avatar_url as avatar,
         (select max(a.day)::text from attendance a where a.person_id = p.id and a.day <= ${to}::date) as last_seen
       from people p
-      where p.org_id = ${o} and p.active and p.created_at::date <= ${to}::date ${group ? (group === "—" ? sql`and p.group_name is null` : sql`and p.group_name = ${group}`) : sql``}
+      where p.org_id = ${o} and p.active and not p.is_visitor and p.created_at::date <= ${to}::date ${group ? (group === "—" ? sql`and p.group_name is null` : sql`and p.group_name = ${group}`) : sql``}
       order by p.full_name`;
     const rows = await sql<Att[]>`
       select person_id, service_id, day::text from attendance
@@ -104,7 +107,18 @@ export const GET = handle(async (req) => {
       select method::text as method, count(*)::int as n from attendance
       where org_id = ${o} and day between ${from}::date and ${to}::date ${svc} group by 1`;
     const groupList = await sql`select distinct group_name from people where org_id = ${o} and group_name is not null order by 1`;
-    return { services, people, rows, prevRows, t, series, methods, groupList: groupList.map((g) => g.group_name as string) };
+    // Visitors who came in this period: who they are, first time or returning, for follow-up.
+    const visitorSvc = serviceId ? sql`and a.service_id = ${serviceId}` : sql``;
+    const visitors = await sql`
+      select p.id, p.full_name, p.phone, p.invited_by,
+        count(distinct a.day)::int as visits_in_period,
+        (select count(distinct a2.day)::int from attendance a2 where a2.person_id = p.id) as visits,
+        (select min(a2.day)::text from attendance a2 where a2.person_id = p.id) as first_visit,
+        max(a.day)::text as last_visit
+      from people p join attendance a on a.person_id = p.id
+      where p.org_id = ${o} and p.is_visitor and p.active and a.day between ${from}::date and ${to}::date ${visitorSvc}
+      group by p.id order by max(a.day) desc, p.full_name limit 300`;
+    return { services, people, rows, prevRows, t, series, methods, visitors, groupList: groupList.map((g) => g.group_name as string) };
   });
 
   const svcById = new Map(data.services.map((s) => [s.id, s]));
@@ -246,6 +260,11 @@ export const GET = handle(async (req) => {
     methods: data.methods,
     groups: [...groups.values()].sort((a, b) => b.people - a.people),
     groupList: data.groupList,
+    visitors: {
+      total: data.visitors.length,
+      firstTime: data.visitors.filter((v) => v.first_visit >= from).length,
+      people: data.visitors.map((v) => ({ ...v, firstTime: v.first_visit >= from })),
+    },
     group,
     lists: {
       absent: { total: absent.length, people: absent.slice(0, LIST_LIMIT).map(strip) },

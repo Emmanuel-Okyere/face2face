@@ -12,10 +12,12 @@ type CheckIn = {
   result: "checked_in" | "already";
   person: { id: string; code: string; full_name: string; group_name: string | null; avatar: string | null };
   at: string;
-  method: "face" | "qr" | "manual";
+  method: "face" | "qr" | "manual" | "visitor";
   late: boolean;
   rank: number;
   streak: number;
+  visitor?: boolean; // from the visitor form
+  visits?: number;
 };
 type Outcome =
   | CheckIn
@@ -29,7 +31,8 @@ type Phase =
   | { k: "capturing" }
   | { k: "verifying" }
   | { k: "result"; outcome: Outcome }
-  | { k: "qr" };
+  | { k: "qr" }
+  | { k: "visitor" };
 
 const STEP_TIMEOUT = 8000;
 const GOOD_FRAMES_TO_START = 5;
@@ -377,21 +380,31 @@ export default function Kiosk({
               </div>
             )}
             {cam !== "ready" && <CameraMessage state={cam} />}
-            {phase.k === "result" && <ResultCard outcome={phase.outcome} onQr={allowQr ? () => setPhase({ k: "qr" }) : undefined} />}
+            {phase.k === "result" && (
+              <ResultCard outcome={phase.outcome} onQr={allowQr ? () => setPhase({ k: "qr" }) : undefined} onVisitor={() => setPhase({ k: "visitor" })} />
+            )}
+            {phase.k === "visitor" && <VisitorForm orgName={orgName} onCancel={toIdle} onDone={(o) => showResult(o, 6000)} />}
           </div>
 
           {cam === "ready" || cam === "starting" ? <Instruction phase={phase} /> : null}
 
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {phase.k === "qr" ? (
+            {phase.k === "qr" || phase.k === "visitor" ? (
               <Button variant="ghost" onClick={toIdle}>
                 ← Back to face check-in
               </Button>
-            ) : allowQr ? (
-              <Button variant="ghost" onClick={() => setPhase({ k: "qr" })} disabled={cam !== "ready"}>
-                <QrIcon /> Use QR badge instead
-              </Button>
-            ) : null}
+            ) : (
+              <>
+                {allowQr && (
+                  <Button variant="ghost" onClick={() => setPhase({ k: "qr" })} disabled={cam !== "ready"}>
+                    <QrIcon /> Use QR badge instead
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => setPhase({ k: "visitor" })}>
+                  I&apos;m visiting
+                </Button>
+              </>
+            )}
           </div>
         </section>
 
@@ -462,7 +475,65 @@ function Instruction({ phase }: { phase: Phase }) {
   return <p className="text-2xl">&nbsp;</p>;
 }
 
-function ResultCard({ outcome, onQr }: { outcome: Outcome; onQr?: () => void }) {
+/** "I'm visiting": name, optional phone and who invited them — then they're checked in. */
+function VisitorForm({ orgName, onCancel, onDone }: { orgName: string; onCancel: () => void; onDone: (o: Outcome) => void }) {
+  const [f, setF] = useState({ full_name: "", phone: "", invited_by: "" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  // An abandoned form goes back to face check-in by itself.
+  useEffect(() => {
+    const t = setTimeout(onCancel, 90_000);
+    return () => clearTimeout(t);
+  }, [f, onCancel]);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/kiosk/visitor", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      onDone(data as Outcome);
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  const input = "w-full rounded-2xl border border-line bg-surface px-4 py-3 text-lg outline-none focus:border-ink/40";
+  return (
+    <div className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm">
+      <form onSubmit={submit} className="pop w-[min(100%,460px)] space-y-4 rounded-3xl bg-surface p-6 shadow-2xl">
+        <div>
+          <div className="text-2xl font-semibold tracking-tight">Welcome to {orgName}!</div>
+          <p className="text-sm text-muted">Tell us your name and we&apos;ll check you in.</p>
+        </div>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted">Your name</span>
+          <input required autoFocus autoComplete="name" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} className={input} />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted">Phone (optional)</span>
+          <input type="tel" inputMode="tel" autoComplete="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="024 123 4567" className={input} />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-muted">Who invited you? (optional)</span>
+          <input value={f.invited_by} onChange={(e) => setF({ ...f, invited_by: e.target.value })} className={input} />
+        </label>
+        {err && <p className="text-sm text-danger">{err}</p>}
+        <div className="flex gap-2">
+          <Button type="button" variant="ghost" className="flex-1 py-3" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" className="flex-1 py-3" loading={busy}>
+            Check me in
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ResultCard({ outcome, onQr, onVisitor }: { outcome: Outcome; onQr?: () => void; onVisitor?: () => void }) {
   if ("person" in outcome) {
     const p = outcome.person;
     const already = outcome.result === "already";
@@ -472,11 +543,17 @@ function ResultCard({ outcome, onQr }: { outcome: Outcome; onQr?: () => void }) 
           <div className="mx-auto mb-4 w-fit rounded-full ring-4 ring-good/50">
             <Avatar src={p.avatar} name={p.full_name} size={96} />
           </div>
-          <div className="text-sm text-muted">{already ? "Welcome back" : greeting()}</div>
+          <div className="text-sm text-muted">{outcome.visitor ? "Welcome" : already ? "Welcome back" : greeting()}</div>
           <div className="text-3xl font-semibold tracking-tight">{p.full_name}</div>
           <div className="mt-1 text-sm text-muted">
-            {p.code}
-            {p.group_name ? ` · ${p.group_name}` : ""}
+            {outcome.visitor ? (
+              (outcome.visits ?? 1) <= 1 ? "First visit — we're glad you came" : `Visit ${outcome.visits} — good to see you again`
+            ) : (
+              <>
+                {p.code}
+                {p.group_name ? ` · ${p.group_name}` : ""}
+              </>
+            )}
           </div>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm">
             <span className={already ? "text-muted" : "font-medium text-good"}>
@@ -511,10 +588,19 @@ function ResultCard({ outcome, onQr }: { outcome: Outcome; onQr?: () => void }) 
         <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-warn/15 text-2xl text-warn">!</div>
         <div className="text-2xl font-semibold tracking-tight">{c.title}</div>
         <p className="mt-2 text-sm text-muted">{reason || c.body}</p>
-        {onQr && (outcome.result === "unknown" || outcome.result === "ambiguous") && (
-          <Button className="mt-5" onClick={onQr}>
-            <QrIcon /> Scan QR badge
-          </Button>
+        {(outcome.result === "unknown" || outcome.result === "ambiguous") && (
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {onQr && (
+              <Button onClick={onQr}>
+                <QrIcon /> Scan QR badge
+              </Button>
+            )}
+            {onVisitor && outcome.result === "unknown" && (
+              <Button variant="ghost" onClick={onVisitor}>
+                First time here?
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>

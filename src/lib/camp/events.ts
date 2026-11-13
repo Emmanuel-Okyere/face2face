@@ -28,8 +28,23 @@ export type EventRow = {
   buses_enabled: boolean;
   form: FormConfig;
   duplicates_ignored: string[];
+  meals_enabled: boolean;
+  meals_mode: "together" | "by_church";
+  meals: MealSlot[];
+  meal_token: string;
   created_at: string;
 };
+
+/** A meal served at the event each day, with the time window it's served in. */
+export type MealSlot = { key: string; name: string; from: string; to: string };
+export const mealSlotSchema = z
+  .object({
+    key: z.string().regex(/^[a-z0-9_]{1,30}$/),
+    name: z.string().trim().min(1).max(40),
+    from: z.string().regex(/^\d{2}:\d{2}$/),
+    to: z.string().regex(/^\d{2}:\d{2}$/),
+  })
+  .refine((m) => m.from < m.to, "A meal must end after it starts");
 
 /** What an event's registration form asks for (beyond name, church and contact phone). */
 export type FormConfig = { gender: boolean; age: "both" | "range" | "exact" | "off"; days: boolean; email: boolean; member_phone: boolean };
@@ -54,7 +69,7 @@ export function effectiveForm(e: { form?: Partial<FormConfig> | null; rooms_enab
 // Dates come back as plain YYYY-MM-DD strings (no time-zone shifting).
 export const EVENT_COLS = `id, org_id, name, venue, to_char(starts_on, 'YYYY-MM-DD') as starts_on,
   to_char(ends_on, 'YYYY-MM-DD') as ends_on, registration_open, churches, age_groups, child_age, questions,
-  public_token, archived, unit_label, rooms_enabled, buses_enabled, form, duplicates_ignored, created_at`;
+  public_token, archived, unit_label, rooms_enabled, buses_enabled, form, duplicates_ignored, meals_enabled, meals_mode, meals, meal_token, created_at`;
 
 /** Every day of the event (YYYY-MM-DD), or [] when dates aren't set. Capped at 31 days. */
 export function eventDays(e: Pick<EventRow, "starts_on" | "ends_on">) {
@@ -119,6 +134,17 @@ export const eventSchema = z.object({
   rooms_enabled: z.boolean().default(true),
   buses_enabled: z.boolean().default(true),
   form: formSchema.default(DEFAULT_FORM),
+  meals_enabled: z.boolean().default(false),
+  meals_mode: z.enum(["together", "by_church"]).default("together"),
+  meals: z
+    .array(mealSlotSchema)
+    .max(8)
+    .default([
+      { key: "breakfast", name: "Breakfast", from: "06:00", to: "09:30" },
+      { key: "lunch", name: "Lunch", from: "12:00", to: "15:00" },
+      { key: "supper", name: "Supper", from: "18:00", to: "21:00" },
+    ])
+    .refine((m) => new Set(m.map((x) => x.key)).size === m.length, "Each meal needs a different name"),
   questions: z.array(z.any()).max(30).default([]),
   archived: z.boolean().optional(),
 });

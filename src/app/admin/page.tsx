@@ -9,7 +9,7 @@ import { api, Avatar, Card, CountUp, cx, Empty, fmtTime, Pill } from "@/componen
 type Stats = {
   day: string;
   timeZone: string;
-  totals: { people: number; enrolled: number; present: number; late: number };
+  totals: { people: number; enrolled: number; present: number; late: number; visitors: number; first_time: number };
   hourly: { hour: number; n: number }[];
   methods: { method: string; n: number }[];
   groups: { group_name: string; total: number; present: number }[];
@@ -24,6 +24,7 @@ type Stats = {
     avatar: string | null;
     group_name: string | null;
     late: boolean;
+    is_visitor: boolean;
   }[];
   trend: { day: string; n: number }[];
   services: { id: string; name: string; schedule: string; window: string; present: number; expected: number; status: "open" | "upcoming" | "done" }[];
@@ -42,7 +43,7 @@ function emptyStats(): Stats {
     d.setDate(d.getDate() - 13 + i);
     return { day: iso(d), n: 0 };
   });
-  return { day: iso(today), timeZone: "", totals: { people: 0, enrolled: 0, present: 0, late: 0 }, hourly: [], methods: [], groups: [], recent: [], trend, services: [] };
+  return { day: iso(today), timeZone: "", totals: { people: 0, enrolled: 0, present: 0, late: 0, visitors: 0, first_time: 0 }, hourly: [], methods: [], groups: [], recent: [], trend, services: [] };
 }
 
 function greeting() {
@@ -110,7 +111,18 @@ export default function Dashboard() {
 
       {/* ── Stat cards ── */}
       <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Present today" value={<CountUp value={totals.present} />} foot={<Delta n={delta} suffix="vs yesterday" />} href="/admin/attendance">
+        <StatCard title="Present today" value={<CountUp value={totals.present} />} foot={
+            <span>
+              <Delta n={delta} suffix="vs yesterday" />
+              {totals.visitors > 0 && (
+                <span className="ml-1.5 text-ink/70">
+                  · +{totals.visitors} {totals.visitors === 1 ? "visitor" : "visitors"}
+                  {totals.first_time > 0 && `, ${totals.first_time} first time`}
+                </span>
+              )}
+            </span>
+          }
+          href="/admin/attendance">
           <TwinBars a={yesterday} b={totals.present} max={Math.max(1, totals.people)} />
         </StatCard>
         <StatCard title="Attendance rate" value={<CountUp value={pct(totals.present, totals.people)} format={(n) => `${n}%`} />} foot={<span>{absent} not yet in</span>}>
@@ -189,6 +201,7 @@ export default function Dashboard() {
                     <div className="truncate text-sm font-medium">{r.full_name}</div>
                     <div className="truncate text-xs text-muted">{r.service}</div>
                   </div>
+                  {r.is_visitor && <Pill tone="info">Visitor</Pill>}
                   {r.late && <Pill tone="warn">Late</Pill>}
                   <span className="font-mono text-xs text-muted">{fmtTime(r.checked_in_at)}</span>
                 </li>

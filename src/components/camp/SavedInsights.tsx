@@ -61,7 +61,6 @@ export default function SavedInsights({ d }: { d: EventData }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-medium">Your insights</h2>
-          <p className="text-xs text-muted">Saved views of this event, shared with your team and always up to date.</p>
         </div>
         {editing !== "new" && <Button onClick={() => setEditing("new")}>+ New insight</Button>}
       </div>

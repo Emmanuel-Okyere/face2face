@@ -19,6 +19,9 @@ export type Ev = {
   buses_enabled: boolean;
   form: FormConfig;
   duplicates_ignored: string[];
+  meals_enabled: boolean;
+  meals_mode: "together" | "by_church";
+  meals: { key: string; name: string; from: string; to: string }[];
 };
 export type Room = { id: string; building: string; name: string; gender: "male" | "female" | "family"; beds: number; church: string | null; note: string | null };
 export type Bus = { id: string; name: string; seats: number; churches: string[]; pickup: string | null; departs: string | null; driver: string | null; captain_token: string };

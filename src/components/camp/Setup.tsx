@@ -35,12 +35,13 @@ export default function Setup({ d, reload }: TabProps) {
   const [busy, setBusy] = useState(false);
 
   const save = async (patch: Partial<typeof f> = {}) => {
-    const body = { ...f, ...patch };
+    // Start from the whole saved event so settings managed elsewhere (meals…) are kept.
+    const body = { ...e, ...f, ...patch };
     setBusy(true);
     setMsg("");
     try {
       await api(`/api/admin/events/${e.id}`, { method: "PUT", json: body });
-      setFState(body);
+      setFState({ ...f, ...patch });
       toast("Event saved");
       await reload();
     } catch (err) {
@@ -95,7 +96,6 @@ export default function Setup({ d, reload }: TabProps) {
 
       <Card>
         <div className="mb-1 font-medium">Allocate</div>
-        <p className="mb-2 text-xs text-muted">Turn off what this event doesn&apos;t need; its tab, questions and SMS disappear.</p>
         <div className="grid gap-x-8 sm:grid-cols-2">
           <label className="flex items-center gap-3 py-2">
             <Switch on={f.rooms_enabled} onChange={(v) => setF({ rooms_enabled: v })} label="Rooms & beds" />
@@ -118,10 +118,7 @@ export default function Setup({ d, reload }: TabProps) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="font-medium">{plural(f.unit_label || "Church")}</div>
-            <p className="text-xs text-muted">
-              People choose theirs from this list when registering; rooms and buses can be reserved per {(f.unit_label || "church").toLowerCase()}.
-              {!f.churches.length && <span className="text-warn"> Registration stays closed until the list has at least one.</span>}
-            </p>
+            {!f.churches.length && <p className="text-xs text-warn">Add at least one to open registration.</p>}
           </div>
           <label className="flex items-center gap-2 text-xs text-muted">
             Called
@@ -161,7 +158,6 @@ export default function Setup({ d, reload }: TabProps) {
       <Card className="space-y-3">
         <div>
           <div className="font-medium">Age groups</div>
-          <p className="text-xs text-muted">Used in reports, on passes, and to keep people of similar age in the same rooms.</p>
         </div>
         <div className="space-y-2">
           {f.age_groups.map((g, i) => (

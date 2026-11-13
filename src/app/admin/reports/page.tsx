@@ -42,6 +42,11 @@ type Report = {
   methods: { method: string; n: number }[];
   groups: { group: string; people: number; attended: number }[];
   groupList: string[];
+  visitors: {
+    total: number;
+    firstTime: number;
+    people: { id: string; full_name: string; phone: string | null; invited_by: string | null; visits: number; visits_in_period: number; first_visit: string; last_visit: string; firstTime: boolean }[];
+  };
   group: string | null;
   lists: { absent: { total: number; people: P[] }; drifting: { total: number; people: P[] }; faithful: { total: number; people: P[] } };
 };
@@ -246,6 +251,7 @@ export default function Reports() {
             </Card>
           </div>
           {!r.group && (r.groups.length > 1 || (r.groups[0] && r.groups[0].group !== "—")) ? <Groups r={r} /> : null}
+          {!r.group && r.visitors.total > 0 && <Visitors r={r} />}
           <FollowUp r={r} orgName={org?.name ?? r.org.name} />
         </div>
       )}
@@ -375,6 +381,51 @@ function Engagement({ r }: { r: Report }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Visitors in the period: first time vs returning, with what's needed to follow up. */
+function Visitors({ r }: { r: Report }) {
+  const v = r.visitors;
+  const [all, setAll] = useState(false);
+  const shown = all ? v.people : v.people.slice(0, 8);
+  return (
+    <Card>
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-medium">Visitors</h2>
+        <span className="text-sm text-muted">
+          {v.total} {v.total === 1 ? "visitor" : "visitors"} · {v.firstTime} first time · {v.total - v.firstTime} returning
+        </span>
+      </div>
+      <ul className="divide-y divide-line/70 text-sm">
+        {shown.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5">
+            <div className="min-w-40 flex-1">
+              <a href={`/admin/people/${p.id}`} className="font-medium hover:underline">
+                {p.full_name}
+              </a>
+              <div className="text-xs text-muted">
+                {p.invited_by ? `Invited by ${p.invited_by} · ` : ""}
+                {p.visits === 1 ? "1 visit" : `${p.visits} visits`}, last {fmtDate(p.last_visit, { day: "numeric", month: "short" })}
+              </div>
+            </div>
+            {p.firstTime ? <Pill tone="good">First time</Pill> : <Pill>Returning</Pill>}
+            {p.phone ? (
+              <a href={`tel:${p.phone}`} className="font-mono text-xs text-ink/80 hover:underline">
+                {p.phone}
+              </a>
+            ) : (
+              <span className="text-xs text-muted">No phone</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {v.people.length > 8 && (
+        <button onClick={() => setAll((a) => !a)} className="mt-3 text-xs text-muted hover:text-ink">
+          {all ? "Show fewer" : `Show all ${v.people.length}`}
+        </button>
+      )}
+    </Card>
   );
 }
 

@@ -14,11 +14,14 @@ type Person = {
   bus: { name: string; seat: number; pickup: string | null; departs: string | null } | null;
   needsBus: boolean;
   days: string[] | null;
+  mealsToday: { name: string; at: string | null }[] | null;
 };
 type Pass = {
   org: { name: string; logoUrl: string | null };
   event: { name: string; venue: string | null; starts_on: string | null; ends_on: string | null };
   registration: { code: string; church: string; contact: string };
+  menuToday: { name: string; from: string; to: string; dishes: string[] }[] | null;
+  menuToken: string | null;
   people: Person[];
 };
 
@@ -88,6 +91,32 @@ function PassView() {
         </div>
       </Card>
 
+      {p.menuToday?.some((m) => m.dishes.length) && (
+        <Card className="mb-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-semibold">Today&apos;s menu</h2>
+            {p.menuToken && (
+              <a href={`/menu/${p.menuToken}`} className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline">
+                Whole week
+              </a>
+            )}
+          </div>
+          <ul className="space-y-2.5">
+            {p.menuToday.map((m) => (
+              <li key={m.name} className="grid grid-cols-[5.5rem_1fr] gap-2 text-sm">
+                <span>
+                  <span className="font-medium">{m.name}</span>
+                  <span className="block text-xs text-muted">
+                    {m.from}–{m.to}
+                  </span>
+                </span>
+                <span className={m.dishes.length ? "" : "text-muted"}>{m.dishes.length ? m.dishes.join(" · ") : "To be announced"}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <div className="space-y-3">
         {p.people.map((x) => (
           <article key={x.code} className="card-shadow flex overflow-hidden rounded-3xl border border-line bg-surface">
@@ -114,6 +143,18 @@ function PassView() {
                 )}
               </div>
               {x.bus?.pickup && <div className="text-xs text-muted">Pickup: {x.bus.pickup}</div>}
+              {x.mealsToday && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted">Today</span>
+                  {x.mealsToday.map((m) => (
+                    <span key={m.name} className={m.at ? "font-medium text-[#2e7d4f]" : "text-muted"}>
+                      {m.at ? "✓ " : ""}
+                      {m.name}
+                      {m.at && <span className="font-normal text-muted"> {new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             {/* Ticket stub: the code scanned at the gate and on the bus. */}
             <div className="flex flex-col items-center justify-center gap-1 border-l border-dashed border-line bg-surface-2/50 px-4">

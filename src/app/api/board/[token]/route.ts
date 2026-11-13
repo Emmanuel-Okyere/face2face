@@ -75,6 +75,7 @@ const actionSchema = z.object({
   code: z.string().max(40).optional(), // scanned pass code
   rid: z.uuid().optional(), // tapped from the list
   force: z.boolean().default(false), // board here although assigned to another bus
+  church: z.string().max(120).optional(), // SMS only this church's missing people
 });
 
 export const POST = handle<Ctx>(async (req, { params }) => {
@@ -87,7 +88,7 @@ export const POST = handle<Ctx>(async (req, { params }) => {
     await rateLimit(`board:sms:${bus.id}:${a.trip}`, 3, 10 * 60); // at most 3 reminders per 10 minutes
     if (!smsEnabled()) throw new HttpError(400, "SMS isn't set up — call them instead.");
     const people = await manifest(bus, a.trip);
-    const missing = people.filter((p) => p.status === "missing" && p.assignedHere);
+    const missing = people.filter((p) => p.status === "missing" && p.assignedHere && (!a.church || p.church === a.church));
     if (!missing.length) return json({ sent: 0 });
     // One SMS per phone number, naming everyone it covers.
     const byPhone = new Map<string, string[]>();

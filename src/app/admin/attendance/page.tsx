@@ -10,7 +10,7 @@ type Row = {
   day: string;
   service: string;
   checked_in_at: string;
-  method: "face" | "qr" | "manual" | "link";
+  method: "face" | "qr" | "manual" | "link" | "visitor";
   distance: number | null;
   margin: number | null;
   note: string | null;
@@ -90,6 +90,7 @@ export default function AttendanceLog() {
             ["qr", "QR"],
             ["manual", "Manual"],
             ["link", "Phone"],
+            ["visitor", "Visitors"],
           ].map(([v, l]) => (
             <button key={v} onClick={() => (setMethod(v), setPage(1))} className={cx("rounded-full px-3 py-1", method === v ? "bg-ink text-white" : "text-muted hover:text-ink")}>
               {l}
@@ -164,7 +165,9 @@ export default function AttendanceLog() {
                               ? "Phone + face"
                               : r.method === "qr"
                                 ? "QR badge"
-                                : "Manual"}
+                                : r.method === "visitor"
+                                  ? "Visitor"
+                                  : "Manual"}
                         </Pill>
                       </span>
                     </td>

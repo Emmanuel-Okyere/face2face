@@ -380,7 +380,7 @@ function Duplicates({ d, reload, onOpen }: { d: TabProps["d"]; reload: () => Pro
     <Card className="space-y-3">
       <div>
         <h3 className="font-medium">Possible duplicates · {pairs.length}</h3>
-        <p className="text-xs text-muted">Same name and age in different registrations. Keep one, or mark them as different people.</p>
+        <p className="text-xs text-muted">Same name and age.</p>
       </div>
       <ul className="space-y-2">
         {pairs.slice(0, 20).map(([a, b]) => (

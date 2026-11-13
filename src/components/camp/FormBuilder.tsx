@@ -85,7 +85,6 @@ export default function FormBuilder({ d, onForm, onQuestions }: { d: Draft; onFo
     <Card>
       <div className="mb-4">
         <h2 className="font-medium">Registration form</h2>
-        <p className="text-xs text-muted">What each person is asked. Switch fields off, add your own, and see the form as people will.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(0,0.95fr)]">

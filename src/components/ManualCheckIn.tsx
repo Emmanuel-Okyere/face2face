@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "@/components/feedback";
 import { api, Avatar, Button, Input, Pill } from "@/components/ui";
 
 type P = { id: string; code: string | null; ref: string; full_name: string; group_name: string | null; avatar: string | null };
@@ -16,6 +17,34 @@ export default function ManualCheckIn({ onDone }: { onDone?: () => void }) {
   const [done, setDone] = useState<Record<string, string>>({}); // personId → result text
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  const [visitor, setVisitor] = useState<{ full_name: string; phone: string; invited_by: string } | null>(null);
+
+  const addVisitor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!visitor) return;
+    setBusy("visitor");
+    setErr("");
+    try {
+      const r = await api<{ person: { full_name: string }; visits: number; visitor: boolean; status: string }>("/api/admin/attendance/visitor", {
+        method: "POST",
+        json: { ...visitor, serviceId: service || undefined },
+      });
+      toast(
+        !r.visitor
+          ? `${r.person.full_name} is a member — checked in`
+          : r.visits <= 1
+            ? `${r.person.full_name} checked in · first visit`
+            : `${r.person.full_name} checked in · visit ${r.visits}`,
+      );
+      setVisitor(null);
+      setQ("");
+      onDone?.();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     api<{ services: S[] }>("/api/admin/attendance/manual").then((r) => {
@@ -68,6 +97,26 @@ export default function ManualCheckIn({ onDone }: { onDone?: () => void }) {
       <Input placeholder="Search name or ID…" value={q} onChange={(e) => setQ(e.target.value)} />
       <Input placeholder="Reason (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
       {err && <p className="text-sm text-danger">{err}</p>}
+      {visitor ? (
+        <form onSubmit={addVisitor} className="space-y-2 rounded-2xl border border-line p-3">
+          <div className="text-xs font-medium text-muted">New visitor</div>
+          <Input required autoFocus placeholder="Name" value={visitor.full_name} onChange={(e) => setVisitor({ ...visitor, full_name: e.target.value })} />
+          <Input type="tel" placeholder="Phone (optional)" value={visitor.phone} onChange={(e) => setVisitor({ ...visitor, phone: e.target.value })} />
+          <Input placeholder="Invited by (optional)" value={visitor.invited_by} onChange={(e) => setVisitor({ ...visitor, invited_by: e.target.value })} />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setVisitor(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={busy === "visitor"}>
+              Check in visitor
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <button onClick={() => setVisitor({ full_name: q.trim().length >= 2 && !rows.length ? q.trim() : "", phone: "", invited_by: "" })} className="text-xs text-muted hover:text-ink">
+          + Visitor{q.trim().length >= 2 && !rows.length ? ` — add “${q.trim()}”` : ""}
+        </button>
+      )}
       <ul className="divide-y divide-line">
         {(q.trim().length < 2 ? [] : rows).map((p) => (
           <li key={p.id} className="flex items-center gap-3 py-2">
